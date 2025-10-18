@@ -1,0 +1,17 @@
+## Basic functions 
+
+01. Student login and dashbord for students.
+02. Define Student interface.
+03. Teachers login and dashboard for teachers.
+04. Define Teacher interface.
+05. Defining online meeting place between teacher and student.
+06. If student and teacher are there in same region --> Chance of ofline classes.--> Decided by both of the clients on there convinience.
+07. Learn with Ai feature ---> personalised Ai answers with voice chat features.
+08. Chat bot for for site related queries.
+09. Demo leacture feature for teachers ---> on the basis of demo leacture student decides wheather to continue with teacher or not.
+10. Student should be able to see teacher information such as degree, achievements, medeals, certifications and experience.
+11. Free resources for students -->  student course dependent resources should be displayed.
+12. Small mock tests based on the classroom interaction. Along with Ai summary of the class and mocktests.
+13. PDF score card of the small mock tests and Ai progress tracking and improvement suggestions.
+14. Step-by-step course completion guide and potential roadmap.
+15. Secured payment methods and agreements to avoid cross-money-transfer between students and teachers.
