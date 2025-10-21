@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     # Local apps
     'accounts',
     'core',
+    'courses',
 ]
 
 MIDDLEWARE = [
@@ -64,10 +65,15 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'elite_classroom',
+        'USER': 'elite_user',
+        'PASSWORD': 'ElitePass123',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
+
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
