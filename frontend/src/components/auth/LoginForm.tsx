@@ -38,7 +38,7 @@ export default function LoginForm() {
     try {
       const response = await authAPI.login(formData);
       
-      // Store auth data in Zustand
+      // Store auth data in Zustand.
       setAuth(response.user, response.tokens);
       
       // Redirect based on role

@@ -42,10 +42,10 @@ export default function RegisterForm() {
     try {
       const response = await authAPI.register(formData);
       
-      // Store auth data
+      // Store auth data.
       setAuth(response.user, response.tokens);
       
-      // Redirect based on role
+      // Redirect based on role.
       if (response.user.role === 'STUDENT') {
         router.push('/dashboard/student');
       } else if (response.user.role === 'TEACHER') {
