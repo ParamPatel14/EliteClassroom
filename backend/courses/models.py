@@ -148,7 +148,7 @@ class Resource(models.Model):
     course = models.ForeignKey(
         Course, 
         on_delete=models.CASCADE, 
-        related_name='resources',
+        related_name='course_resources',
         null=True,
         blank=True
     )

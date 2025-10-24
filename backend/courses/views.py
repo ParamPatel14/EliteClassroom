@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Avg
 from accounts.models import User, TeacherProfile
+from accounts.serializers import UserProfileSerializer
 from accounts.permissions import IsStudent, IsTeacher
 from .models import Course, Session, Resource, Enrollment, TeacherRating
 from .serializers import (
