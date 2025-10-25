@@ -46,6 +46,9 @@ export default function RegisterForm() {
       setAuth(response.user, response.tokens);
       
       // Redirect based on role.
+    setErrors({ 
+    success: 'Registration successful! Please check your email to verify your account.' 
+    });
       if (response.user.role === 'STUDENT') {
         router.push('/dashboard/student');
       } else if (response.user.role === 'TEACHER') {
