@@ -30,3 +30,43 @@ class TeacherRatingAdmin(admin.ModelAdmin):
     list_display = ('student', 'teacher', 'rating', 'created_at')
     list_filter = ('rating', 'created_at')
     search_fields = ('student__email', 'teacher__email')
+
+
+from django.contrib import admin
+from django.utils import timezone
+from .models import TeacherCredential, TeacherAvailability, TeacherAvailabilityException
+from accounts.models import User, TeacherProfile
+
+@admin.register(TeacherCredential)
+class TeacherCredentialAdmin(admin.ModelAdmin):
+    list_display = ('teacher', 'degree', 'institution', 'verified', 'submitted_at', 'verified_at')
+    list_filter = ('verified', 'submitted_at', 'verified_at')
+    search_fields = ('teacher__email', 'degree', 'institution', 'certification_name')
+
+    @admin.action(description="Verify selected credentials")
+    def verify_credentials(self, request, queryset):
+        for cred in queryset:
+            cred.verified = True
+            cred.verified_at = timezone.now()
+            cred.verified_by = request.user
+            cred.save()
+        # Mark teacher as verified if at least one credential is verified
+        teachers = set(q.teacher for q in queryset)
+        for t in teachers:
+            if t.role == 'TEACHER' and hasattr(t, 'teacher_profile'):
+                t.teacher_profile.is_verified = True
+                t.teacher_profile.save()
+    actions = ['verify_credentials']
+
+@admin.register(TeacherAvailability)
+class TeacherAvailabilityAdmin(admin.ModelAdmin):
+    list_display = ('teacher', 'day_of_week', 'start_time', 'end_time', 'timezone', 'is_recurring', 'is_active')
+    list_filter = ('day_of_week', 'timezone', 'is_recurring', 'is_active')
+    search_fields = ('teacher__email',)
+
+@admin.register(TeacherAvailabilityException)
+class TeacherAvailabilityExceptionAdmin(admin.ModelAdmin):
+    list_display = ('teacher', 'date', 'start_time', 'end_time', 'is_blocked', 'reason')
+    list_filter = ('date', 'is_blocked')
+    search_fields = ('teacher__email',)
+

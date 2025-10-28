@@ -62,3 +62,41 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Enrollment
         fields = '__all__'
+
+
+from rest_framework import serializers
+from .models import TeacherCredential, TeacherAvailability, TeacherAvailabilityException
+from accounts.serializers import UserProfileSerializer
+from accounts.models import User
+
+class TeacherCredentialSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TeacherCredential
+        fields = ['id', 'degree', 'institution', 'year', 'certification_name', 'achievement', 'document', 'verified', 'submitted_at', 'verified_at']
+        read_only_fields = ['verified', 'submitted_at', 'verified_at']
+
+class TeacherProfileBuilderSerializer(serializers.ModelSerializer):
+    """Allows teacher to update extended profile fields."""
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'bio', 'city', 'state', 'country']
+
+class TeacherAvailabilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TeacherAvailability
+        fields = ['id', 'day_of_week', 'start_time', 'end_time', 'timezone', 'is_recurring', 'is_active']
+
+    def validate(self, attrs):
+        if attrs['start_time'] >= attrs['end_time']:
+            raise serializers.ValidationError("start_time must be before end_time")
+        return attrs
+
+class TeacherAvailabilityExceptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TeacherAvailabilityException
+        fields = ['id', 'date', 'start_time', 'end_time', 'reason', 'is_blocked']
+
+    def validate(self, attrs):
+        if attrs['start_time'] >= attrs['end_time']:
+            raise serializers.ValidationError("start_time must be before end_time")
+        return attrs

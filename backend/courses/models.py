@@ -207,3 +207,67 @@ class TeacherRating(models.Model):
     
     def __str__(self):
         return f"{self.student.email} rated {self.teacher.email} - {self.rating}/5"
+    
+
+from django.db import models
+from django.conf import settings
+from django.utils import timezone
+
+User = settings.AUTH_USER_MODEL
+
+class TeacherCredential(models.Model):
+    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name='credentials')
+    degree = models.CharField(max_length=150)
+    institution = models.CharField(max_length=200)
+    year = models.PositiveIntegerField(null=True, blank=True)
+    certification_name = models.CharField(max_length=200, blank=True, null=True)
+    achievement = models.TextField(blank=True, null=True)
+    document = models.FileField(upload_to='credentials/', blank=True, null=True)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    verified = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(blank=True, null=True)
+    verified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='verified_credentials')
+
+    class Meta:
+        ordering = ['-submitted_at']
+
+    def __str__(self):
+        return f"{self.teacher.email} - {self.degree or self.certification_name}"
+
+
+class TeacherAvailability(models.Model):
+    DAYS = [
+        (0, 'Mon'), (1, 'Tue'), (2, 'Wed'), (3, 'Thu'),
+        (4, 'Fri'), (5, 'Sat'), (6, 'Sun'),
+    ]
+    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name='availabilities')
+    day_of_week = models.IntegerField(choices=DAYS)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    timezone = models.CharField(max_length=50, default='UTC')
+    is_recurring = models.BooleanField(default=True)  # weekly
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['day_of_week', 'start_time']
+
+    def __str__(self):
+        return f"{self.teacher.email} {self.get_day_of_week_display()} {self.start_time}-{self.end_time} ({self.timezone})"
+
+
+class TeacherAvailabilityException(models.Model):
+    """One-off blackout/override windows in teacher’s local timezone."""
+    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name='availability_exceptions')
+    date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    reason = models.CharField(max_length=255, blank=True, null=True)
+    is_blocked = models.BooleanField(default=True)  # block time by default
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['date', 'start_time']
+
+    def __str__(self):
+        return f"{self.teacher.email} {self.date} {self.start_time}-{self.end_time} blocked={self.is_blocked}"
