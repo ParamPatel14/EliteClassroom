@@ -118,6 +118,11 @@ class Session(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    provider_room_id = models.CharField(max_length=128, blank=True, null=True)
+    recording_assets = models.JSONField(default=list, blank=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    ended_at = models.DateTimeField(blank=True, null=True)
+
     class Meta:
         ordering = ['-scheduled_date', '-start_time']
     

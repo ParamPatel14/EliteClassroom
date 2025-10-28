@@ -46,3 +46,12 @@ urlpatterns += [
     path('teacher/dashboard/', TeacherDashboardView.as_view(), name='teacher-dashboard'),
     path('teachers/<int:teacher_id>/free-slots/', TeacherFreeSlotsView.as_view(), name='teacher-free-slots'),
 ]
+
+from django.urls import path
+from .views_rtc import SessionJoinTokenView, SessionRecordingWebhookView
+
+urlpatterns += [
+    path('rtc/session/<int:session_id>/join-token/', SessionJoinTokenView.as_view(), name='rtc-join-token'),
+    path('rtc/recording/webhook/', SessionRecordingWebhookView.as_view(), name='rtc-recording-webhook'),
+]
+

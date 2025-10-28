@@ -178,3 +178,11 @@ else:
 
 # Frontend URL for email links
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+
+
+from decouple import config
+
+VIDEOSDK_API_KEY = config('VIDEOSDK_API_KEY', default='')
+VIDEOSDK_SECRET_KEY = config('VIDEOSDK_SECRET_KEY', default='')
+VIDEOSDK_REGION = config('VIDEOSDK_REGION', default='sg001')  # example region
+VIDEOSDK_WEBHOOK_SECRET = config('VIDEOSDK_WEBHOOK_SECRET', default='')
