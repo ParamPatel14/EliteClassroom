@@ -55,3 +55,31 @@ urlpatterns += [
     path('rtc/recording/webhook/', SessionRecordingWebhookView.as_view(), name='rtc-recording-webhook'),
 ]
 
+from django.urls import path
+from .views_demo import (
+    DemoLectureListView, DemoLectureDetailView, TeacherDemoUploadView,
+    TeacherDemoListView, DemoRatingCreateView, DemoRatingListView,
+    CourseModuleListView, ModuleProgressListView, ModuleProgressUpdateView,
+    LearningRoadmapListCreateView, LearningRoadmapDetailView
+)
+
+urlpatterns += [
+    # Demo lectures
+    path('demos/', DemoLectureListView.as_view(), name='demo-list'),
+    path('demos/<int:pk>/', DemoLectureDetailView.as_view(), name='demo-detail'),
+    path('teacher/demos/', TeacherDemoListView.as_view(), name='teacher-demo-list'),
+    path('teacher/demos/upload/', TeacherDemoUploadView.as_view(), name='teacher-demo-upload'),
+    
+    # Demo ratings
+    path('demos/<int:demo_id>/ratings/', DemoRatingListView.as_view(), name='demo-rating-list'),
+    path('demos/rate/', DemoRatingCreateView.as_view(), name='demo-rate'),
+    
+    # Course modules and progress
+    path('courses/<int:course_id>/modules/', CourseModuleListView.as_view(), name='course-modules'),
+    path('enrollments/<int:enrollment_id>/progress/', ModuleProgressListView.as_view(), name='module-progress'),
+    path('progress/<int:pk>/update/', ModuleProgressUpdateView.as_view(), name='module-progress-update'),
+    
+    # Learning roadmaps
+    path('student/roadmaps/', LearningRoadmapListCreateView.as_view(), name='roadmap-list-create'),
+    path('student/roadmaps/<int:pk>/', LearningRoadmapDetailView.as_view(), name='roadmap-detail'),
+]

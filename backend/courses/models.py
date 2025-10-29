@@ -283,3 +283,246 @@ class SessionMessage(models.Model):
     sender = models.ForeignKey(User, on_delete=models.CASCADE)
     text = models.TextField()
     sent_at = models.DateTimeField(auto_now_add=True)
+
+
+from django.db import models
+from django.conf import settings
+from django.core.validators import MinValueValidator, MaxValueValidator
+
+User = settings.AUTH_USER_MODEL
+
+# ... existing models (Course, Session, etc.)
+
+class DemoLecture(models.Model):
+    """Demo lectures for teachers to showcase teaching style"""
+    
+    APPROVAL_STATUS = [
+        ('PENDING', 'Pending Review'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+    ]
+    
+    teacher = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='demo_lectures',
+        limit_choices_to={'role': 'TEACHER'}
+    )
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='demo_lectures'
+    )
+    
+    # Content
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    subject = models.CharField(max_length=100)
+    duration_minutes = models.PositiveIntegerField(default=10)
+    
+    # Video files
+    original_video = models.FileField(upload_to='demos/original/', null=True, blank=True)
+    transcoded_video = models.FileField(upload_to='demos/transcoded/', null=True, blank=True)
+    thumbnail = models.ImageField(upload_to='demos/thumbnails/', null=True, blank=True)
+    
+    # Metadata
+    file_size_mb = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    video_codec = models.CharField(max_length=50, blank=True, null=True)
+    video_resolution = models.CharField(max_length=20, blank=True, null=True)  # e.g., "1920x1080"
+    
+    # Approval workflow
+    status = models.CharField(max_length=20, choices=APPROVAL_STATUS, default='PENDING')
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_demos'
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True, null=True)
+    
+    # Analytics
+    view_count = models.PositiveIntegerField(default=0)
+    average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
+    total_ratings = models.PositiveIntegerField(default=0)
+    
+    # Timestamps
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-uploaded_at']
+        indexes = [
+            models.Index(fields=['status', 'teacher']),
+            models.Index(fields=['subject', 'status']),
+        ]
+    
+    def __str__(self):
+        return f"{self.title} by {self.teacher.email} ({self.status})"
+
+
+class DemoRating(models.Model):
+    """Student ratings for demo lectures"""
+    
+    demo = models.ForeignKey(
+        DemoLecture,
+        on_delete=models.CASCADE,
+        related_name='ratings'
+    )
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='demo_ratings',
+        limit_choices_to={'role': 'STUDENT'}
+    )
+    
+    rating = models.PositiveIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    review = models.TextField(blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ('demo', 'student')
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.student.email} rated {self.demo.title} - {self.rating}/5"
+
+
+class CourseModule(models.Model):
+    """Modules/chapters within a course for step-by-step tracking"""
+    
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name='modules'
+    )
+    
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    order = models.PositiveIntegerField(default=0)
+    
+    # Content
+    content = models.TextField(blank=True, null=True)  # Rich text or markdown
+    video_url = models.URLField(blank=True, null=True)
+    resources = models.JSONField(default=list, blank=True)  # List of resource links
+    
+    # Requirements
+    estimated_hours = models.DecimalField(max_digits=5, decimal_places=2, default=1.0)
+    is_mandatory = models.BooleanField(default=True)
+    prerequisite_modules = models.ManyToManyField(
+        'self',
+        symmetrical=False,
+        blank=True,
+        related_name='unlocks'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['course', 'order']
+        unique_together = ('course', 'order')
+    
+    def __str__(self):
+        return f"{self.course.title} - Module {self.order}: {self.title}"
+
+
+class ModuleProgress(models.Model):
+    """Student progress tracking for course modules"""
+    
+    enrollment = models.ForeignKey(
+        Enrollment,
+        on_delete=models.CASCADE,
+        related_name='module_progress'
+    )
+    module = models.ForeignKey(
+        CourseModule,
+        on_delete=models.CASCADE,
+        related_name='student_progress'
+    )
+    
+    # Progress tracking
+    is_started = models.BooleanField(default=False)
+    is_completed = models.BooleanField(default=False)
+    completion_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    
+    # Time tracking
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    time_spent_minutes = models.PositiveIntegerField(default=0)
+    
+    # Assessment
+    quiz_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    attempts = models.PositiveIntegerField(default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ('enrollment', 'module')
+        ordering = ['module__order']
+    
+    def __str__(self):
+        return f"{self.enrollment.student.email} - {self.module.title} ({self.completion_percentage}%)"
+
+
+class LearningRoadmap(models.Model):
+    """Personalized learning roadmaps for students"""
+    
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='roadmaps',
+        limit_choices_to={'role': 'STUDENT'}
+    )
+    
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    goal = models.TextField()  # Student's learning goal
+    
+    # Timeline
+    target_completion_date = models.DateField(null=True, blank=True)
+    estimated_hours_per_week = models.DecimalField(max_digits=5, decimal_places=2, default=5.0)
+    
+    # Courses in roadmap
+    courses = models.ManyToManyField(
+        Course,
+        through='RoadmapCourse',
+        related_name='roadmaps'
+    )
+    
+    # Status
+    is_active = models.BooleanField(default=True)
+    is_completed = models.BooleanField(default=False)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.student.email} - {self.title}"
+
+
+class RoadmapCourse(models.Model):
+    """Through model for ordered courses in a roadmap"""
+    
+    roadmap = models.ForeignKey(LearningRoadmap, on_delete=models.CASCADE)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    order = models.PositiveIntegerField(default=0)
+    is_completed = models.BooleanField(default=False)
+    
+    class Meta:
+        ordering = ['order']
+        unique_together = ('roadmap', 'course')
+    
+    def __str__(self):
+        return f"{self.roadmap.title} - {self.order}. {self.course.title}"
