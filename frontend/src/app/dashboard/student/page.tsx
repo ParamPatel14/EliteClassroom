@@ -149,6 +149,9 @@ export default function StudentDashboard() {
           ) : (
             <p className="text-gray-600">Not enrolled in any courses yet</p>
           )}
+        <Link href="/demos"><Button>Browse Demos</Button></Link>
+        <Link href="/dashboard/student/roadmap"><Button>My Roadmap</Button></Link>
+
         </div>
       </main>
     </div>

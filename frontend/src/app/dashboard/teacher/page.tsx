@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
+import Link from 'next/link';
 
 export default function TeacherDashboard() {
   const { user, isAuthenticated, logout } = useAuthStore();
@@ -77,6 +78,7 @@ export default function TeacherDashboard() {
             <h3 className="text-lg font-semibold mb-2">Earnings</h3>
             <p className="text-gray-600">₹0</p>
           </div>
+          <Link href="/dashboard/teacher/demos"><Button>Demo Lectures</Button></Link>
         </div>
       </main>
     </div>
