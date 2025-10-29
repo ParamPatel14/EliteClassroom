@@ -186,3 +186,12 @@ VIDEOSDK_API_KEY = config('VIDEOSDK_API_KEY', default='')
 VIDEOSDK_SECRET_KEY = config('VIDEOSDK_SECRET_KEY', default='')
 VIDEOSDK_REGION = config('VIDEOSDK_REGION', default='sg001')  # example region
 VIDEOSDK_WEBHOOK_SECRET = config('VIDEOSDK_WEBHOOK_SECRET', default='')
+
+
+ASGI_APPLICATION = 'config.asgi.application'
+CHANNEL_LAYERS = {
+  "default": {
+    "BACKEND": "channels_redis.core.RedisChannelLayer",
+    "CONFIG": {"hosts": [("127.0.0.1", 6379)]},
+  },
+}

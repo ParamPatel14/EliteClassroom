@@ -276,3 +276,10 @@ class TeacherAvailabilityException(models.Model):
 
     def __str__(self):
         return f"{self.teacher.email} {self.date} {self.start_time}-{self.end_time} blocked={self.is_blocked}"
+
+
+class SessionMessage(models.Model):
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='messages')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE)
+    text = models.TextField()
+    sent_at = models.DateTimeField(auto_now_add=True)
