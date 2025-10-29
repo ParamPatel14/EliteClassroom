@@ -123,6 +123,17 @@ export default function TeacherSearchPage() {
           <Button onClick={handleSearch} className="mt-4" variant="primary">
             Search Teachers
           </Button>
+          // Add button near filters
+          <button
+              className="px-3 py-2 bg-gray-200 rounded"
+              onClick={()=>{
+                navigator.geolocation.getCurrentPosition((pos)=>{
+                  const { latitude, longitude } = pos.coords;
+                  setFilters(prev => ({ ...prev, lat: String(latitude), lon: String(longitude), radius_km: '10' }));
+                });
+              }}
+          >Use my location</button>
+
         </div>
 
         {/* Results */}

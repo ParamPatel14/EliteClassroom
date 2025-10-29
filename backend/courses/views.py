@@ -11,6 +11,9 @@ from .serializers import (
     CourseSerializer, SessionSerializer, SessionCreateSerializer,
     ResourceSerializer, EnrollmentSerializer, TeacherRatingSerializer
 )
+from django.db.models import F
+from .utils_geo import haversine_km
+
 
 
 class TeacherSearchView(generics.ListAPIView):
@@ -59,6 +62,30 @@ class TeacherSearchView(generics.ListAPIView):
             queryset = queryset.filter(teacher_profile__available_for_offline=True)
         
         return queryset.select_related('teacher_profile')
+    
+    def list(self, request, *args, **kwargs):
+        lat = request.query_params.get('lat')
+        lon = request.query_params.get('lon')
+        radius_km = float(request.query_params.get('radius_km', '0') or '0')
+        queryset = self.get_queryset()
+
+        results = []
+        if lat and lon and radius_km > 0:
+            lat = float(lat); lon = float(lon)
+            for t in queryset:
+                if t.latitude and t.longitude:
+                    dist = haversine_km(lat, lon, float(t.latitude), float(t.longitude))
+                    if dist <= radius_km and getattr(t.teacher_profile, 'available_for_offline', False):
+                        results.append((dist, t))
+            results.sort(key=lambda x: x[0])
+            queryset = [t for _, t in results]
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            ser = self.get_serializer(page, many=True)
+            return self.get_paginated_response(ser.data)
+        ser = self.get_serializer(queryset, many=True)
+        return Response(ser.data)
 
 
 class StudentDashboardView(APIView):
