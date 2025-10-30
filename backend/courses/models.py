@@ -526,3 +526,129 @@ class RoadmapCourse(models.Model):
     
     def __str__(self):
         return f"{self.roadmap.title} - {self.order}. {self.course.title}"
+
+
+from django.db import models
+from django.conf import settings
+
+User = settings.AUTH_USER_MODEL
+
+# ... existing models (Course, Session, DemoLecture, etc.)
+
+class AIConversation(models.Model):
+    """AI tutor conversation sessions"""
+    
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='ai_conversations',
+        limit_choices_to={'role': 'STUDENT'}
+    )
+    course = models.ForeignKey(
+        'Course',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ai_conversations'
+    )
+    
+    # Session metadata
+    title = models.CharField(max_length=255, blank=True, null=True)
+    subject = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Context for AI
+    system_prompt = models.TextField(blank=True, null=True)
+    student_goal = models.TextField(blank=True, null=True)  # What student wants to learn
+    
+    # Session stats
+    message_count = models.PositiveIntegerField(default=0)
+    duration_minutes = models.PositiveIntegerField(default=0)
+    
+    # Timestamps
+    started_at = models.DateTimeField(auto_now_add=True)
+    last_message_at = models.DateTimeField(auto_now=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['student', 'is_active']),
+            models.Index(fields=['course', 'started_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.student.email} - {self.title or 'Untitled'} ({self.message_count} msgs)"
+
+
+class AIMessage(models.Model):
+    """Individual messages in AI conversations"""
+    
+    ROLE_CHOICES = [
+        ('system', 'System'),
+        ('user', 'User'),
+        ('assistant', 'Assistant'),
+    ]
+    
+    conversation = models.ForeignKey(
+        AIConversation,
+        on_delete=models.CASCADE,
+        related_name='messages'
+    )
+    
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    content = models.TextField()
+    
+    # Voice metadata
+    has_audio = models.BooleanField(default=False)
+    audio_file = models.FileField(upload_to='ai_audio/', null=True, blank=True)
+    audio_duration_seconds = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    
+    # LLM metadata
+    model_used = models.CharField(max_length=50, blank=True, null=True)  # e.g., "gpt-4", "gemini-pro"
+    tokens_used = models.PositiveIntegerField(default=0)
+    response_time_ms = models.PositiveIntegerField(default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['conversation', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.role}: {self.content[:50]}..."
+
+
+class AIFeedback(models.Model):
+    """Student feedback on AI responses"""
+    
+    RATING_CHOICES = [
+        (1, 'Poor'),
+        (2, 'Fair'),
+        (3, 'Good'),
+        (4, 'Very Good'),
+        (5, 'Excellent'),
+    ]
+    
+    message = models.OneToOneField(
+        AIMessage,
+        on_delete=models.CASCADE,
+        related_name='feedback'
+    )
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='ai_feedback'
+    )
+    
+    rating = models.PositiveIntegerField(choices=RATING_CHOICES)
+    comment = models.TextField(blank=True, null=True)
+    is_helpful = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.student.email} rated {self.message.id}: {self.rating}/5"

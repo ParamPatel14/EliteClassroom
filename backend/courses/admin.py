@@ -166,3 +166,35 @@ class RoadmapCourseAdmin(admin.ModelAdmin):
     list_filter = ('is_completed',)
     search_fields = ('roadmap__title', 'course__title')
     ordering = ('roadmap', 'order')
+
+
+from django.contrib import admin
+from .models import AIConversation, AIMessage, AIFeedback
+
+# ... existing admin classes
+
+@admin.register(AIConversation)
+class AIConversationAdmin(admin.ModelAdmin):
+    list_display = ('student', 'title', 'subject', 'message_count', 'is_active', 'started_at')
+    list_filter = ('is_active', 'started_at', 'course')
+    search_fields = ('student__email', 'title', 'subject')
+    readonly_fields = ('message_count', 'started_at', 'last_message_at', 'ended_at')
+
+
+@admin.register(AIMessage)
+class AIMessageAdmin(admin.ModelAdmin):
+    list_display = ('conversation', 'role', 'content_preview', 'model_used', 'tokens_used', 'created_at')
+    list_filter = ('role', 'model_used', 'has_audio', 'created_at')
+    search_fields = ('content', 'conversation__student__email')
+    readonly_fields = ('created_at',)
+    
+    def content_preview(self, obj):
+        return obj.content[:100] + '...' if len(obj.content) > 100 else obj.content
+    content_preview.short_description = 'Content'
+
+
+@admin.register(AIFeedback)
+class AIFeedbackAdmin(admin.ModelAdmin):
+    list_display = ('student', 'message', 'rating', 'is_helpful', 'created_at')
+    list_filter = ('rating', 'is_helpful', 'created_at')
+    search_fields = ('student__email', 'comment')

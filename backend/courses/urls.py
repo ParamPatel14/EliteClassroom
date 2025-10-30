@@ -83,3 +83,20 @@ urlpatterns += [
     path('student/roadmaps/', LearningRoadmapListCreateView.as_view(), name='roadmap-list-create'),
     path('student/roadmaps/<int:pk>/', LearningRoadmapDetailView.as_view(), name='roadmap-detail'),
 ]
+
+
+from django.urls import path
+from .views_ai import (
+    AIConversationListCreateView, AIConversationDetailView,
+    AIChatView, AIVoiceChatView, AIMessageListView, AIFeedbackView
+)
+
+urlpatterns += [
+    # AI Tutor endpoints
+    path('ai/conversations/', AIConversationListCreateView.as_view(), name='ai-conversation-list'),
+    path('ai/conversations/<int:pk>/', AIConversationDetailView.as_view(), name='ai-conversation-detail'),
+    path('ai/conversations/<int:conversation_id>/chat/', AIChatView.as_view(), name='ai-chat'),
+    path('ai/conversations/<int:conversation_id>/voice/', AIVoiceChatView.as_view(), name='ai-voice-chat'),
+    path('ai/conversations/<int:conversation_id>/messages/', AIMessageListView.as_view(), name='ai-messages'),
+    path('ai/feedback/', AIFeedbackView.as_view(), name='ai-feedback'),
+]

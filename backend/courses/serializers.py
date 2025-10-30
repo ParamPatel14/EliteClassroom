@@ -246,3 +246,50 @@ class LearningRoadmapCreateSerializer(serializers.ModelSerializer):
             )
         
         return roadmap
+
+
+from rest_framework import serializers
+from .models import AIConversation, AIMessage, AIFeedback
+
+# ... existing serializers
+
+class AIMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AIMessage
+        fields = [
+            'id', 'conversation', 'role', 'content', 'has_audio',
+            'audio_file', 'audio_duration_seconds', 'model_used',
+            'tokens_used', 'response_time_ms', 'created_at'
+        ]
+        read_only_fields = ['conversation', 'created_at']
+
+
+class AIConversationSerializer(serializers.ModelSerializer):
+    recent_messages = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = AIConversation
+        fields = [
+            'id', 'student', 'course', 'title', 'subject', 'student_goal',
+            'message_count', 'duration_minutes', 'started_at',
+            'last_message_at', 'ended_at', 'is_active', 'recent_messages'
+        ]
+        read_only_fields = ['student', 'message_count', 'started_at', 'last_message_at']
+    
+    def get_recent_messages(self, obj):
+        messages = obj.messages.order_by('-created_at')[:5]
+        return AIMessageSerializer(messages, many=True).data
+
+
+class AIFeedbackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AIFeedback
+        fields = ['id', 'message', 'student', 'rating', 'comment', 'is_helpful', 'created_at']
+        read_only_fields = ['student', 'created_at']
+    
+    def validate_message(self, value):
+        # Ensure message belongs to requesting student
+        request = self.context.get('request')
+        if value.conversation.student != request.user:
+            raise serializers.ValidationError("Cannot rate messages from other students")
+        return value

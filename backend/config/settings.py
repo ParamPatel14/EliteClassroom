@@ -195,3 +195,21 @@ CHANNEL_LAYERS = {
     "CONFIG": {"hosts": [("127.0.0.1", 6379)]},
   },
 }
+
+from decouple import config
+
+# ... existing settings
+
+# AI Assistant Configuration
+LLM_PROVIDER = config('LLM_PROVIDER', default='gemini')  # 'gemini' or 'openai'
+OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
+
+# Voice Services
+ELEVENLABS_API_KEY = config('ELEVENLABS_API_KEY', default='')
+ELEVENLABS_VOICE_ID = config('ELEVENLABS_VOICE_ID', default='21m00Tcm4TlvDq8ikWAM')
+
+# AI Assistant Settings
+AI_MAX_CONTEXT_MESSAGES = config('AI_MAX_CONTEXT_MESSAGES', default=20, cast=int)
+AI_RESPONSE_MAX_TOKENS = config('AI_RESPONSE_MAX_TOKENS', default=500, cast=int)
+AI_TEMPERATURE = config('AI_TEMPERATURE', default=0.7, cast=float)
