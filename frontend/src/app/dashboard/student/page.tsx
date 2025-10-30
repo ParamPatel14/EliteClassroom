@@ -66,6 +66,10 @@ export default function StudentDashboard() {
             <Button onClick={handleLogout} variant="outline">
               Logout
             </Button>
+            <Link href="/ai-tutor">
+              <Button variant="primary">🤖 AI Tutor</Button>
+            </Link>
+
           </div>
         </div>
       </nav>
