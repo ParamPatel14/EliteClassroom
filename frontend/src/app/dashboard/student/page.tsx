@@ -70,6 +70,9 @@ export default function StudentDashboard() {
               <Button variant="primary">🤖 AI Tutor</Button>
             </Link>
 
+
+            
+
           </div>
         </div>
       </nav>
