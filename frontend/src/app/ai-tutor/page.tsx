@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import axiosInstance from '@/lib/axios';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import VoiceChat from '@/components/ai/Voicechat';
+import VoiceChat from '@/components/ai/VoiceChat';
 
 interface Message {
   id: number;
@@ -175,7 +175,7 @@ export default function AITutorPage() {
                     />
 
 
-                    
+
                 </div>
                 )}
               <Input
