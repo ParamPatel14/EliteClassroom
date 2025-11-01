@@ -198,3 +198,46 @@ class AIFeedbackAdmin(admin.ModelAdmin):
     list_display = ('student', 'message', 'rating', 'is_helpful', 'created_at')
     list_filter = ('rating', 'is_helpful', 'created_at')
     search_fields = ('student__email', 'comment')
+
+
+from django.contrib import admin
+from .models import (
+    MockTest, MockTestQuestion, MockTestAttempt, MockTestAnswer,
+    SessionSummary, StudentProgressAnalytics, RecommendedCourse
+)
+
+# ... existing admin classes
+
+@admin.register(MockTest)
+class MockTestAdmin(admin.ModelAdmin):
+    list_display = ('title', 'student', 'subject', 'difficulty', 'total_questions', 'created_at')
+    list_filter = ('difficulty', 'is_published', 'created_at')
+    search_fields = ('title', 'student__email', 'subject')
+
+
+@admin.register(MockTestAttempt)
+class MockTestAttemptAdmin(admin.ModelAdmin):
+    list_display = ('student', 'mock_test', 'percentage', 'passed', 'status', 'started_at')
+    list_filter = ('status', 'passed', 'started_at')
+    search_fields = ('student__email', 'mock_test__title')
+
+
+@admin.register(SessionSummary)
+class SessionSummaryAdmin(admin.ModelAdmin):
+    list_display = ('session', 'generated_at', 'is_visible_to_student')
+    list_filter = ('generated_at', 'is_visible_to_student')
+    search_fields = ('session__title', 'summary_text')
+
+
+@admin.register(StudentProgressAnalytics)
+class StudentProgressAnalyticsAdmin(admin.ModelAdmin):
+    list_display = ('student', 'course', 'completion_rate', 'average_test_score', 'learning_pace', 'computed_at')
+    list_filter = ('learning_pace', 'at_risk_of_dropout', 'computed_at')
+    search_fields = ('student__email', 'course__title')
+
+
+@admin.register(RecommendedCourse)
+class RecommendedCourseAdmin(admin.ModelAdmin):
+    list_display = ('student', 'course', 'confidence_score', 'rank', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('student__email', 'course__title')

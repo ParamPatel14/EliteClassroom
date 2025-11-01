@@ -100,3 +100,27 @@ urlpatterns += [
     path('ai/conversations/<int:conversation_id>/messages/', AIMessageListView.as_view(), name='ai-messages'),
     path('ai/feedback/', AIFeedbackView.as_view(), name='ai-feedback'),
 ]
+
+
+from django.urls import path
+from .views_assessment import (
+    GenerateMockTestView, MockTestListView, StartMockTestView,
+    SubmitMockTestView, MockTestAttemptListView, GenerateSessionSummaryView,
+    StudentAnalyticsView, CourseRecommendationsView
+)
+
+urlpatterns += [
+    # Mock Tests
+    path('sessions/<int:session_id>/generate-test/', GenerateMockTestView.as_view(), name='generate-test'),
+    path('tests/', MockTestListView.as_view(), name='test-list'),
+    path('tests/<int:test_id>/start/', StartMockTestView.as_view(), name='start-test'),
+    path('tests/attempts/<int:attempt_id>/submit/', SubmitMockTestView.as_view(), name='submit-test'),
+    path('tests/attempts/', MockTestAttemptListView.as_view(), name='attempt-list'),
+    
+    # Session Summaries
+    path('sessions/<int:session_id>/generate-summary/', GenerateSessionSummaryView.as_view(), name='generate-summary'),
+    
+    # Analytics & Recommendations
+    path('student/analytics/', StudentAnalyticsView.as_view(), name='student-analytics'),
+    path('student/recommendations/', CourseRecommendationsView.as_view(), name='course-recommendations'),
+]
