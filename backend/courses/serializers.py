@@ -293,3 +293,103 @@ class AIFeedbackSerializer(serializers.ModelSerializer):
         if value.conversation.student != request.user:
             raise serializers.ValidationError("Cannot rate messages from other students")
         return value
+
+
+from rest_framework import serializers
+from .models import (
+    MockTest, MockTestQuestion, MockTestAttempt, MockTestAnswer,
+    SessionSummary, StudentProgressAnalytics, RecommendedCourse
+)
+
+# ... existing serializers
+
+class MockTestQuestionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MockTestQuestion
+        fields = [
+            'id', 'order', 'question_type', 'question_text', 'options',
+            'points', 'bloom_level', 'explanation'
+        ]
+        # Hide correct_answer in student view
+
+
+class MockTestSerializer(serializers.ModelSerializer):
+    questions = MockTestQuestionSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = MockTest
+        fields = [
+            'id', 'title', 'description', 'subject', 'difficulty',
+            'total_questions', 'duration_minutes', 'passing_score',
+            'is_published', 'created_at', 'questions'
+        ]
+
+
+class MockTestAnswerSerializer(serializers.ModelSerializer):
+    question_text = serializers.CharField(source='question.question_text', read_only=True)
+    correct_answer = serializers.CharField(source='question.correct_answer', read_only=True)
+    
+    class Meta:
+        model = MockTestAnswer
+        fields = [
+            'id', 'question', 'question_text', 'selected_answer',
+            'correct_answer', 'is_correct', 'points_earned', 'ai_feedback'
+        ]
+        read_only_fields = ['is_correct', 'points_earned', 'ai_feedback']
+
+
+class MockTestAttemptSerializer(serializers.ModelSerializer):
+    mock_test = MockTestSerializer(read_only=True)
+    answers = MockTestAnswerSerializer(many=True, read_only=True)
+    scorecard_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = MockTestAttempt
+        fields = [
+            'id', 'mock_test', 'status', 'total_score', 'max_score',
+            'percentage', 'passed', 'started_at', 'submitted_at',
+            'time_taken_minutes', 'scorecard_pdf', 'scorecard_url', 'answers'
+        ]
+        read_only_fields = [
+            'total_score', 'max_score', 'percentage', 'passed',
+            'started_at', 'scorecard_pdf'
+        ]
+    
+    def get_scorecard_url(self, obj):
+        if obj.scorecard_pdf:
+            return obj.scorecard_pdf.url
+        return None
+
+
+class SessionSummarySerializer(serializers.ModelSerializer):
+    session_title = serializers.CharField(source='session.title', read_only=True)
+    
+    class Meta:
+        model = SessionSummary
+        fields = [
+            'id', 'session', 'session_title', 'summary_text', 'key_topics',
+            'action_items', 'generated_at', 'is_visible_to_student'
+        ]
+
+
+class StudentProgressAnalyticsSerializer(serializers.ModelSerializer):
+    course_title = serializers.CharField(source='course.title', read_only=True)
+    
+    class Meta:
+        model = StudentProgressAnalytics
+        fields = [
+            'id', 'course', 'course_title', 'total_sessions', 'total_test_attempts',
+            'average_test_score', 'modules_completed', 'modules_in_progress',
+            'completion_rate', 'total_learning_hours', 'avg_session_duration_minutes',
+            'last_activity_date', 'strengths', 'weaknesses', 'recommended_topics',
+            'learning_pace', 'predicted_completion_date', 'at_risk_of_dropout',
+            'dropout_risk_score', 'computed_at'
+        ]
+
+
+class RecommendedCourseSerializer(serializers.ModelSerializer):
+    course = CourseSerializer(read_only=True)
+    
+    class Meta:
+        model = RecommendedCourse
+        fields = ['id', 'course', 'confidence_score', 'reason', 'rank', 'created_at']

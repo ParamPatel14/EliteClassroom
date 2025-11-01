@@ -652,3 +652,315 @@ class AIFeedback(models.Model):
     
     def __str__(self):
         return f"{self.student.email} rated {self.message.id}: {self.rating}/5"
+
+
+from django.db import models
+from django.conf import settings
+from django.core.validators import MinValueValidator, MaxValueValidator
+
+User = settings.AUTH_USER_MODEL
+
+# ... existing models (AIConversation, etc.)
+
+class MockTest(models.Model):
+    """AI-generated mock tests based on session content"""
+    
+    DIFFICULTY_CHOICES = [
+        ('EASY', 'Easy'),
+        ('MEDIUM', 'Medium'),
+        ('HARD', 'Hard'),
+    ]
+    
+    session = models.ForeignKey(
+        'Session',
+        on_delete=models.CASCADE,
+        related_name='mock_tests',
+        null=True,
+        blank=True
+    )
+    course = models.ForeignKey(
+        'Course',
+        on_delete=models.CASCADE,
+        related_name='mock_tests',
+        null=True,
+        blank=True
+    )
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='mock_tests',
+        limit_choices_to={'role': 'STUDENT'}
+    )
+    
+    # Test metadata
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    subject = models.CharField(max_length=100)
+    difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='MEDIUM')
+    
+    # Generation info
+    generated_from_content = models.TextField(blank=True, null=True)  # Source material
+    ai_prompt = models.TextField(blank=True, null=True)
+    
+    # Test configuration
+    total_questions = models.PositiveIntegerField(default=10)
+    duration_minutes = models.PositiveIntegerField(default=30)
+    passing_score = models.DecimalField(max_digits=5, decimal_places=2, default=60.00)
+    
+    # Status
+    is_published = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['student', 'created_at']),
+            models.Index(fields=['subject', 'difficulty']),
+        ]
+    
+    def __str__(self):
+        return f"{self.title} - {self.student.email}"
+
+
+class MockTestQuestion(models.Model):
+    """Questions in mock tests"""
+    
+    QUESTION_TYPE_CHOICES = [
+        ('MCQ', 'Multiple Choice'),
+        ('TRUE_FALSE', 'True/False'),
+        ('SHORT_ANSWER', 'Short Answer'),
+    ]
+    
+    mock_test = models.ForeignKey(
+        MockTest,
+        on_delete=models.CASCADE,
+        related_name='questions'
+    )
+    
+    order = models.PositiveIntegerField(default=0)
+    question_type = models.CharField(max_length=20, choices=QUESTION_TYPE_CHOICES, default='MCQ')
+    
+    # Question content
+    question_text = models.TextField()
+    explanation = models.TextField(blank=True, null=True)  # Why this answer is correct
+    
+    # MCQ options
+    options = models.JSONField(default=list, blank=True)  # ["Option A", "Option B", ...]
+    correct_answer = models.CharField(max_length=500)  # For MCQ: "A", for short: expected answer
+    
+    # Scoring
+    points = models.DecimalField(max_digits=5, decimal_places=2, default=1.00)
+    
+    # Analytics
+    bloom_level = models.CharField(max_length=50, blank=True, null=True)  # remember, understand, apply, etc.
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['order']
+        unique_together = ('mock_test', 'order')
+    
+    def __str__(self):
+        return f"Q{self.order}: {self.question_text[:50]}"
+
+
+class MockTestAttempt(models.Model):
+    """Student attempts at mock tests"""
+    
+    STATUS_CHOICES = [
+        ('IN_PROGRESS', 'In Progress'),
+        ('COMPLETED', 'Completed'),
+        ('ABANDONED', 'Abandoned'),
+    ]
+    
+    mock_test = models.ForeignKey(
+        MockTest,
+        on_delete=models.CASCADE,
+        related_name='attempts'
+    )
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='test_attempts'
+    )
+    
+    # Attempt info
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='IN_PROGRESS')
+    
+    # Scoring
+    total_score = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    max_score = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    passed = models.BooleanField(default=False)
+    
+    # Time tracking
+    started_at = models.DateTimeField(auto_now_add=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    time_taken_minutes = models.PositiveIntegerField(default=0)
+    
+    # PDF report
+    scorecard_pdf = models.FileField(upload_to='scorecards/', null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['student', 'status', 'started_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.student.email} - {self.mock_test.title} ({self.percentage}%)"
+
+
+class MockTestAnswer(models.Model):
+    """Student answers to test questions"""
+    
+    attempt = models.ForeignKey(
+        MockTestAttempt,
+        on_delete=models.CASCADE,
+        related_name='answers'
+    )
+    question = models.ForeignKey(
+        MockTestQuestion,
+        on_delete=models.CASCADE,
+        related_name='student_answers'
+    )
+    
+    # Answer
+    selected_answer = models.CharField(max_length=500)
+    is_correct = models.BooleanField(default=False)
+    points_earned = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    
+    # AI feedback
+    ai_feedback = models.TextField(blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ('attempt', 'question')
+    
+    def __str__(self):
+        return f"{self.attempt.student.email} - Q{self.question.order}"
+
+
+class SessionSummary(models.Model):
+    """AI-generated summaries of live sessions"""
+    
+    session = models.OneToOneField(
+        'Session',
+        on_delete=models.CASCADE,
+        related_name='ai_summary'
+    )
+    
+    # Summary content
+    summary_text = models.TextField()
+    key_topics = models.JSONField(default=list)  # ["Topic 1", "Topic 2", ...]
+    action_items = models.JSONField(default=list)  # ["Action 1", "Action 2", ...]
+    
+    # Transcript info
+    transcript_source = models.CharField(max_length=50, blank=True, null=True)  # "chat", "recording", "manual"
+    original_transcript = models.TextField(blank=True, null=True)
+    
+    # Generation metadata
+    ai_model_used = models.CharField(max_length=50, blank=True, null=True)
+    generated_at = models.DateTimeField(auto_now_add=True)
+    tokens_used = models.PositiveIntegerField(default=0)
+    
+    # Visibility
+    is_visible_to_student = models.BooleanField(default=True)
+    is_visible_to_teacher = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['-generated_at']
+    
+    def __str__(self):
+        return f"Summary: {self.session.title}"
+
+
+class StudentProgressAnalytics(models.Model):
+    """ML-powered student progress tracking"""
+    
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='progress_analytics'
+    )
+    course = models.ForeignKey(
+        'Course',
+        on_delete=models.CASCADE,
+        related_name='student_analytics',
+        null=True,
+        blank=True
+    )
+    
+    # Aggregated metrics
+    total_sessions = models.PositiveIntegerField(default=0)
+    total_test_attempts = models.PositiveIntegerField(default=0)
+    average_test_score = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    
+    # Learning velocity
+    modules_completed = models.PositiveIntegerField(default=0)
+    modules_in_progress = models.PositiveIntegerField(default=0)
+    completion_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)  # %
+    
+    # Engagement metrics
+    total_learning_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
+    avg_session_duration_minutes = models.DecimalField(max_digits=6, decimal_places=2, default=0.00)
+    last_activity_date = models.DateField(null=True, blank=True)
+    
+    # ML-generated insights
+    strengths = models.JSONField(default=list)  # ["Topic A", "Topic B"]
+    weaknesses = models.JSONField(default=list)  # ["Topic X", "Topic Y"]
+    recommended_topics = models.JSONField(default=list)  # Next topics to study
+    learning_pace = models.CharField(max_length=20, default='MODERATE')  # SLOW, MODERATE, FAST
+    
+    # Predictions
+    predicted_completion_date = models.DateField(null=True, blank=True)
+    at_risk_of_dropout = models.BooleanField(default=False)
+    dropout_risk_score = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)  # 0-100
+    
+    # Timestamps
+    computed_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ('student', 'course')
+        ordering = ['-computed_at']
+    
+    def __str__(self):
+        return f"{self.student.email} - {self.course.title if self.course else 'Overall'}"
+
+
+class RecommendedCourse(models.Model):
+    """ML-generated course recommendations"""
+    
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='course_recommendations'
+    )
+    course = models.ForeignKey(
+        'Course',
+        on_delete=models.CASCADE,
+        related_name='recommendations'
+    )
+    
+    # Recommendation metadata
+    confidence_score = models.DecimalField(max_digits=5, decimal_places=2)  # 0-100
+    reason = models.TextField()  # Why this course is recommended
+    
+    # Ranking
+    rank = models.PositiveIntegerField(default=0)
+    
+    # ML model info
+    model_version = models.CharField(max_length=50, blank=True, null=True)
+    features_used = models.JSONField(default=dict, blank=True)  # Feature weights
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['rank']
+        unique_together = ('student', 'course')
+    
+    def __str__(self):
+        return f"{self.student.email} -> {self.course.title} ({self.confidence_score}%)"
