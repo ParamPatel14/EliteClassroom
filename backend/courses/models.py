@@ -964,3 +964,244 @@ class RecommendedCourse(models.Model):
     
     def __str__(self):
         return f"{self.student.email} -> {self.course.title} ({self.confidence_score}%)"
+
+
+from django.db import models
+from django.conf import settings
+
+User = settings.AUTH_USER_MODEL
+
+# ... existing models
+
+class SupportFAQ(models.Model):
+    """Knowledge base of frequently asked questions"""
+    
+    CATEGORY_CHOICES = [
+        ('ACCOUNT', 'Account & Login'),
+        ('BOOKING', 'Booking & Sessions'),
+        ('PAYMENT', 'Payment & Billing'),
+        ('TECHNICAL', 'Technical Issues'),
+        ('COURSES', 'Courses & Content'),
+        ('GENERAL', 'General Information'),
+    ]
+    
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    question = models.TextField()
+    answer = models.TextField()
+    
+    # SEO and searchability
+    keywords = models.JSONField(default=list, blank=True)  # ["login", "password", "reset"]
+    related_questions = models.ManyToManyField('self', symmetrical=True, blank=True)
+    
+    # Analytics
+    view_count = models.PositiveIntegerField(default=0)
+    helpful_count = models.PositiveIntegerField(default=0)
+    not_helpful_count = models.PositiveIntegerField(default=0)
+    
+    # Metadata
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['category', 'order']
+        verbose_name = "FAQ"
+        verbose_name_plural = "FAQs"
+    
+    def __str__(self):
+        return f"[{self.category}] {self.question[:50]}"
+
+
+class ChatbotConversation(models.Model):
+    """Support chatbot conversation sessions"""
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='chatbot_conversations',
+        null=True,
+        blank=True  # Allow anonymous users
+    )
+    session_id = models.CharField(max_length=100, unique=True)  # For anonymous tracking
+    
+    # Context
+    user_agent = models.CharField(max_length=500, blank=True, null=True)
+    page_url = models.CharField(max_length=500, blank=True, null=True)
+    referrer = models.CharField(max_length=500, blank=True, null=True)
+    
+    # Conversation metadata
+    message_count = models.PositiveIntegerField(default=0)
+    escalated_to_human = models.BooleanField(default=False)
+    resolved = models.BooleanField(default=False)
+    
+    # Feedback
+    user_satisfaction = models.PositiveIntegerField(null=True, blank=True)  # 1-5 rating
+    feedback_comment = models.TextField(blank=True, null=True)
+    
+    started_at = models.DateTimeField(auto_now_add=True)
+    last_message_at = models.DateTimeField(auto_now=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['session_id']),
+            models.Index(fields=['user', 'started_at']),
+        ]
+    
+    def __str__(self):
+        user_str = self.user.email if self.user else f"Anonymous ({self.session_id[:8]})"
+        return f"{user_str} - {self.message_count} msgs"
+
+
+class ChatbotMessage(models.Model):
+    """Individual messages in chatbot conversations"""
+    
+    ROLE_CHOICES = [
+        ('user', 'User'),
+        ('bot', 'Bot'),
+        ('system', 'System'),
+    ]
+    
+    conversation = models.ForeignKey(
+        ChatbotConversation,
+        on_delete=models.CASCADE,
+        related_name='messages'
+    )
+    
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    content = models.TextField()
+    
+    # Bot response metadata
+    intent_detected = models.CharField(max_length=100, blank=True, null=True)
+    confidence_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    faq_matched = models.ForeignKey(
+        SupportFAQ,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bot_matches'
+    )
+    
+    # LLM metadata
+    model_used = models.CharField(max_length=50, blank=True, null=True)
+    tokens_used = models.PositiveIntegerField(default=0)
+    response_time_ms = models.PositiveIntegerField(default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['created_at']
+    
+    def __str__(self):
+        return f"{self.role}: {self.content[:50]}"
+
+
+class SupportTicket(models.Model):
+    """Escalated support tickets from chatbot"""
+    
+    STATUS_CHOICES = [
+        ('OPEN', 'Open'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('WAITING', 'Waiting for User'),
+        ('RESOLVED', 'Resolved'),
+        ('CLOSED', 'Closed'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('URGENT', 'Urgent'),
+    ]
+    
+    ticket_number = models.CharField(max_length=20, unique=True)
+    
+    # User info
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='support_tickets'
+    )
+    email = models.EmailField()
+    name = models.CharField(max_length=255)
+    
+    # Ticket details
+    subject = models.CharField(max_length=255)
+    description = models.TextField()
+    category = models.CharField(max_length=50)
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN')
+    
+    # Context
+    conversation = models.ForeignKey(
+        ChatbotConversation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='escalated_tickets'
+    )
+    page_url = models.CharField(max_length=500, blank=True, null=True)
+    
+    # Assignment
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_tickets',
+        limit_choices_to={'role': 'ADMIN'}
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', 'priority']),
+            models.Index(fields=['user', 'status']),
+        ]
+    
+    def __str__(self):
+        return f"#{self.ticket_number} - {self.subject}"
+    
+    def save(self, *args, **kwargs):
+        if not self.ticket_number:
+            # Generate ticket number
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+            self.ticket_number = f"TKT-{timestamp}"
+        super().save(*args, **kwargs)
+
+
+class TicketMessage(models.Model):
+    """Messages in support ticket thread"""
+    
+    ticket = models.ForeignKey(
+        SupportTicket,
+        on_delete=models.CASCADE,
+        related_name='messages'
+    )
+    sender = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='ticket_messages'
+    )
+    
+    is_staff_reply = models.BooleanField(default=False)
+    message = models.TextField()
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['created_at']
+    
+    def __str__(self):
+        return f"Message on {self.ticket.ticket_number}"

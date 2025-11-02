@@ -241,3 +241,45 @@ class RecommendedCourseAdmin(admin.ModelAdmin):
     list_display = ('student', 'course', 'confidence_score', 'rank', 'created_at')
     list_filter = ('created_at',)
     search_fields = ('student__email', 'course__title')
+
+
+from django.contrib import admin
+from .models import (
+    SupportFAQ, ChatbotConversation, ChatbotMessage,
+    SupportTicket, TicketMessage
+)
+
+# ... existing admin classes
+
+@admin.register(SupportFAQ)
+class SupportFAQAdmin(admin.ModelAdmin):
+    list_display = ('question', 'category', 'view_count', 'helpful_count', 'is_active', 'order')
+    list_filter = ('category', 'is_active')
+    search_fields = ('question', 'answer', 'keywords')
+    list_editable = ('order', 'is_active')
+
+
+@admin.register(ChatbotConversation)
+class ChatbotConversationAdmin(admin.ModelAdmin):
+    list_display = ('session_id', 'user', 'message_count', 'escalated_to_human', 'resolved', 'started_at')
+    list_filter = ('escalated_to_human', 'resolved', 'started_at')
+    search_fields = ('session_id', 'user__email')
+    readonly_fields = ('session_id', 'started_at', 'last_message_at')
+
+
+@admin.register(SupportTicket)
+class SupportTicketAdmin(admin.ModelAdmin):
+    list_display = ('ticket_number', 'subject', 'user', 'status', 'priority', 'created_at')
+    list_filter = ('status', 'priority', 'category', 'created_at')
+    search_fields = ('ticket_number', 'subject', 'email', 'name')
+    readonly_fields = ('ticket_number', 'created_at')
+    
+    actions = ['mark_resolved', 'mark_in_progress']
+    
+    @admin.action(description="Mark as Resolved")
+    def mark_resolved(self, request, queryset):
+        queryset.update(status='RESOLVED', resolved_at=timezone.now())
+    
+    @admin.action(description="Mark as In Progress")
+    def mark_in_progress(self, request, queryset):
+        queryset.update(status='IN_PROGRESS')

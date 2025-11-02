@@ -393,3 +393,59 @@ class RecommendedCourseSerializer(serializers.ModelSerializer):
     class Meta:
         model = RecommendedCourse
         fields = ['id', 'course', 'confidence_score', 'reason', 'rank', 'created_at']
+
+
+from rest_framework import serializers
+from .models import (
+    SupportFAQ, ChatbotConversation, ChatbotMessage,
+    SupportTicket, TicketMessage
+)
+
+# ... existing serializers
+
+class SupportFAQSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SupportFAQ
+        fields = [
+            'id', 'category', 'question', 'answer', 'keywords',
+            'view_count', 'helpful_count', 'not_helpful_count'
+        ]
+
+
+class ChatbotMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatbotMessage
+        fields = [
+            'id', 'role', 'content', 'intent_detected',
+            'confidence_score', 'created_at'
+        ]
+
+
+class ChatbotConversationSerializer(serializers.ModelSerializer):
+    messages = ChatbotMessageSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = ChatbotConversation
+        fields = [
+            'id', 'session_id', 'message_count', 'escalated_to_human',
+            'resolved', 'started_at', 'messages'
+        ]
+
+
+class TicketMessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.CharField(source='sender.full_name', read_only=True)
+    
+    class Meta:
+        model = TicketMessage
+        fields = ['id', 'sender', 'sender_name', 'is_staff_reply', 'message', 'created_at']
+
+
+class SupportTicketSerializer(serializers.ModelSerializer):
+    messages = TicketMessageSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = SupportTicket
+        fields = [
+            'id', 'ticket_number', 'subject', 'description', 'category',
+            'priority', 'status', 'created_at', 'updated_at', 'messages'
+        ]

@@ -124,3 +124,28 @@ urlpatterns += [
     path('student/analytics/', StudentAnalyticsView.as_view(), name='student-analytics'),
     path('student/recommendations/', CourseRecommendationsView.as_view(), name='course-recommendations'),
 ]
+
+
+from django.urls import path
+from .views_chatbot import (
+    ChatbotInitView, ChatbotMessageView, FAQListView, FAQDetailView,
+    FAQFeedbackView, CreateSupportTicketView, UserTicketsView,
+    TicketDetailView, ConversationFeedbackView
+)
+
+urlpatterns += [
+    # Chatbot
+    path('chatbot/init/', ChatbotInitView.as_view(), name='chatbot-init'),
+    path('chatbot/message/', ChatbotMessageView.as_view(), name='chatbot-message'),
+    path('chatbot/<str:session_id>/feedback/', ConversationFeedbackView.as_view(), name='chatbot-feedback'),
+    
+    # FAQs
+    path('faqs/', FAQListView.as_view(), name='faq-list'),
+    path('faqs/<int:pk>/', FAQDetailView.as_view(), name='faq-detail'),
+    path('faqs/<int:faq_id>/feedback/', FAQFeedbackView.as_view(), name='faq-feedback'),
+    
+    # Support Tickets
+    path('support/tickets/create/', CreateSupportTicketView.as_view(), name='create-ticket'),
+    path('support/tickets/', UserTicketsView.as_view(), name='user-tickets'),
+    path('support/tickets/<int:pk>/', TicketDetailView.as_view(), name='ticket-detail'),
+]
