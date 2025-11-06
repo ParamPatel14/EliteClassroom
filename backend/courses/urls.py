@@ -149,3 +149,30 @@ urlpatterns += [
     path('support/tickets/', UserTicketsView.as_view(), name='user-tickets'),
     path('support/tickets/<int:pk>/', TicketDetailView.as_view(), name='ticket-detail'),
 ]
+
+from django.urls import path
+from .views_payment import (
+    CreatePaymentOrderView, VerifyPaymentView, PaymentWebhookView,
+    RequestRefundView, ProcessRefundView, TeacherEarningsView,
+    AddBankAccountView, DownloadInvoiceView
+)
+
+urlpatterns += [
+    # Payments
+    path('payments/create-order/', CreatePaymentOrderView.as_view(), name='create-payment-order'),
+    path('payments/verify/', VerifyPaymentView.as_view(), name='verify-payment'),
+    path('payments/webhook/', PaymentWebhookView.as_view(), name='payment-webhook'),
+    
+    # Refunds
+    path('payments/<int:payment_id>/refund/', RequestRefundView.as_view(), name='request-refund'),
+    path('refunds/<int:refund_id>/process/', ProcessRefundView.as_view(), name='process-refund'),
+    
+    # Teacher
+    path('teacher/earnings/', TeacherEarningsView.as_view(), name='teacher-earnings'),
+    path('teacher/bank-account/', AddBankAccountView.as_view(), name='add-bank-account'),
+    
+    # Invoices
+    path('invoices/<int:invoice_id>/download/', DownloadInvoiceView.as_view(), name='download-invoice'),
+]
+
+

@@ -449,3 +449,71 @@ class SupportTicketSerializer(serializers.ModelSerializer):
             'id', 'ticket_number', 'subject', 'description', 'category',
             'priority', 'status', 'created_at', 'updated_at', 'messages'
         ]
+
+
+from rest_framework import serializers
+from .models import Payment, Payout, Refund, Invoice, TeacherBankAccount
+
+# ... existing serializers
+
+class PaymentSerializer(serializers.ModelSerializer):
+    session_title = serializers.CharField(source='session.title', read_only=True)
+    course_title = serializers.CharField(source='course.title', read_only=True)
+    
+    class Meta:
+        model = Payment
+        fields = [
+            'id', 'student', 'session', 'session_title', 'course', 'course_title',
+            'payment_type', 'amount', 'platform_fee', 'teacher_amount', 'currency',
+            'razorpay_order_id', 'razorpay_payment_id', 'status', 'is_held_in_escrow',
+            'escrow_release_date', 'released_from_escrow', 'payment_method',
+            'created_at', 'captured_at'
+        ]
+        read_only_fields = ['student', 'platform_fee', 'teacher_amount', 'created_at']
+
+
+class PayoutSerializer(serializers.ModelSerializer):
+    teacher_name = serializers.CharField(source='teacher.full_name', read_only=True)
+    
+    class Meta:
+        model = Payout
+        fields = [
+            'id', 'teacher', 'teacher_name', 'payment', 'amount', 'currency',
+            'status', 'bank_name', 'created_at', 'processed_at', 'completed_at'
+        ]
+
+
+class RefundSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.full_name', read_only=True)
+    payment_amount = serializers.DecimalField(source='payment.amount', max_digits=10, decimal_places=2, read_only=True)
+    
+    class Meta:
+        model = Refund
+        fields = [
+            'id', 'payment', 'payment_amount', 'student', 'student_name',
+            'refund_amount', 'reason', 'description', 'status', 'admin_notes',
+            'requested_at', 'reviewed_at', 'completed_at'
+        ]
+        read_only_fields = ['student', 'requested_at']
+
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Invoice
+        fields = [
+            'id', 'invoice_number', 'invoice_date', 'student_name',
+            'student_email', 'subtotal', 'tax_amount', 'total_amount',
+            'pdf_file', 'created_at'
+        ]
+
+
+class TeacherBankAccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TeacherBankAccount
+        fields = [
+            'id', 'account_holder_name', 'account_number', 'ifsc_code',
+            'bank_name', 'branch_name', 'is_verified', 'verified_at'
+        ]
+        extra_kwargs = {
+            'account_number': {'write_only': True}  # Don't expose in responses
+        }

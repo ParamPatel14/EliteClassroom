@@ -283,3 +283,69 @@ class SupportTicketAdmin(admin.ModelAdmin):
     @admin.action(description="Mark as In Progress")
     def mark_in_progress(self, request, queryset):
         queryset.update(status='IN_PROGRESS')
+
+
+from django.contrib import admin
+from django.utils import timezone
+from .models import Payment, Payout, Refund, Invoice, TeacherBankAccount
+
+# ... existing admin classes
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ('id', 'student', 'payment_type', 'amount', 'status', 'is_held_in_escrow', 'created_at')
+    list_filter = ('status', 'payment_type', 'is_held_in_escrow', 'created_at')
+    search_fields = ('student__email', 'razorpay_order_id', 'razorpay_payment_id')
+    readonly_fields = ('created_at', 'captured_at')
+    
+    actions = ['release_from_escrow']
+    
+    @admin.action(description="Release selected payments from escrow")
+    def release_from_escrow(self, request, queryset):
+        from .payment_service import EscrowManager
+        released = 0
+        for payment in queryset:
+            if EscrowManager.release_payment(payment):
+                released += 1
+        self.message_user(request, f"{released} payments released from escrow")
+
+
+@admin.register(Payout)
+class PayoutAdmin(admin.ModelAdmin):
+    list_display = ('id', 'teacher', 'amount', 'status', 'created_at', 'completed_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('teacher__email', 'razorpay_transfer_id')
+
+
+@admin.register(Refund)
+class RefundAdmin(admin.ModelAdmin):
+    list_display = ('id', 'student', 'refund_amount', 'reason', 'status', 'requested_at')
+    list_filter = ('status', 'reason', 'requested_at')
+    search_fields = ('student__email', 'description')
+    
+    actions = ['approve_refunds', 'reject_refunds']
+    
+    @admin.action(description="Approve selected refunds")
+    def approve_refunds(self, request, queryset):
+        for refund in queryset.filter(status='REQUESTED'):
+            # Process via view logic
+            pass
+
+
+@admin.register(Invoice)
+class InvoiceAdmin(admin.ModelAdmin):
+    list_display = ('invoice_number', 'student_email', 'total_amount', 'invoice_date')
+    search_fields = ('invoice_number', 'student_email')
+
+
+@admin.register(TeacherBankAccount)
+class TeacherBankAccountAdmin(admin.ModelAdmin):
+    list_display = ('teacher', 'bank_name', 'account_holder_name', 'is_verified')
+    list_filter = ('is_verified', 'bank_name')
+    search_fields = ('teacher__email', 'account_holder_name')
+    
+    actions = ['verify_accounts']
+    
+    @admin.action(description="Verify selected bank accounts")
+    def verify_accounts(self, request, queryset):
+        queryset.update(is_verified=True, verified_at=timezone.now())
