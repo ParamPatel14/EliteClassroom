@@ -213,3 +213,17 @@ ELEVENLABS_VOICE_ID = config('ELEVENLABS_VOICE_ID', default='21m00Tcm4TlvDq8ikWA
 AI_MAX_CONTEXT_MESSAGES = config('AI_MAX_CONTEXT_MESSAGES', default=20, cast=int)
 AI_RESPONSE_MAX_TOKENS = config('AI_RESPONSE_MAX_TOKENS', default=500, cast=int)
 AI_TEMPERATURE = config('AI_TEMPERATURE', default=0.7, cast=float)
+
+
+from decouple import config
+
+# ... existing settings
+
+# Payment Configuration
+RAZORPAY_KEY_ID = config('RAZORPAY_KEY_ID', default='')
+RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
+RAZORPAY_WEBHOOK_SECRET = config('RAZORPAY_WEBHOOK_SECRET', default='')
+
+PLATFORM_COMMISSION_PERCENTAGE = config('PLATFORM_COMMISSION_PERCENTAGE', default=15, cast=int)
+PAYMENT_CURRENCY = config('PAYMENT_CURRENCY', default='INR')
+ESCROW_HOLD_HOURS = config('ESCROW_HOLD_HOURS', default=24, cast=int)

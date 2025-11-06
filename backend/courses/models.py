@@ -1205,3 +1205,302 @@ class TicketMessage(models.Model):
     
     def __str__(self):
         return f"Message on {self.ticket.ticket_number}"
+
+
+from django.db import models
+from django.conf import settings
+from django.utils import timezone
+from decimal import Decimal
+
+User = settings.AUTH_USER_MODEL
+
+# ... existing models (Session, Course, etc.)
+
+class Payment(models.Model):
+    """Payment transactions for sessions and courses"""
+    
+    PAYMENT_STATUS = [
+        ('PENDING', 'Pending'),
+        ('AUTHORIZED', 'Authorized'),
+        ('CAPTURED', 'Captured'),
+        ('FAILED', 'Failed'),
+        ('REFUNDED', 'Refunded'),
+        ('PARTIALLY_REFUNDED', 'Partially Refunded'),
+    ]
+    
+    PAYMENT_TYPE = [
+        ('SESSION', 'Session Booking'),
+        ('COURSE', 'Course Enrollment'),
+        ('SUBSCRIPTION', 'Subscription'),
+    ]
+    
+    # Relationships
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='payments',
+        limit_choices_to={'role': 'STUDENT'}
+    )
+    session = models.ForeignKey(
+        'Session',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payments'
+    )
+    course = models.ForeignKey(
+        'Course',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='course_payments'
+    )
+    
+    # Payment details
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)  # Total amount
+    platform_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)  # Our commission
+    teacher_amount = models.DecimalField(max_digits=10, decimal_places=2)  # Amount to teacher
+    currency = models.CharField(max_length=3, default='INR')
+    
+    # Razorpay IDs
+    razorpay_order_id = models.CharField(max_length=100, unique=True)
+    razorpay_payment_id = models.CharField(max_length=100, blank=True, null=True)
+    razorpay_signature = models.CharField(max_length=255, blank=True, null=True)
+    
+    # Status
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS, default='PENDING')
+    
+    # Escrow management
+    is_held_in_escrow = models.BooleanField(default=True)
+    escrow_release_date = models.DateTimeField(null=True, blank=True)
+    released_from_escrow = models.BooleanField(default=False)
+    
+    # Metadata
+    payment_method = models.CharField(max_length=50, blank=True, null=True)  # card, upi, netbanking
+    error_code = models.CharField(max_length=50, blank=True, null=True)
+    error_description = models.TextField(blank=True, null=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    authorized_at = models.DateTimeField(null=True, blank=True)
+    captured_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['student', 'status']),
+            models.Index(fields=['razorpay_order_id']),
+            models.Index(fields=['status', 'is_held_in_escrow']),
+        ]
+    
+    def __str__(self):
+        return f"{self.student.email} - {self.payment_type} - {self.amount} {self.currency}"
+    
+    def calculate_platform_fee(self):
+        """Calculate platform commission"""
+        fee_percentage = Decimal(settings.PLATFORM_COMMISSION_PERCENTAGE) / Decimal(100)
+        self.platform_fee = (self.amount * fee_percentage).quantize(Decimal('0.01'))
+        self.teacher_amount = (self.amount - self.platform_fee).quantize(Decimal('0.01'))
+        return self.platform_fee
+
+
+class Payout(models.Model):
+    """Teacher payouts from escrow"""
+    
+    PAYOUT_STATUS = [
+        ('PENDING', 'Pending'),
+        ('PROCESSING', 'Processing'),
+        ('COMPLETED', 'Completed'),
+        ('FAILED', 'Failed'),
+        ('REVERSED', 'Reversed'),
+    ]
+    
+    teacher = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='payouts',
+        limit_choices_to={'role': 'TEACHER'}
+    )
+    payment = models.OneToOneField(
+        Payment,
+        on_delete=models.CASCADE,
+        related_name='payout'
+    )
+    
+    # Payout details
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=3, default='INR')
+    
+    # Razorpay transfer details
+    razorpay_transfer_id = models.CharField(max_length=100, blank=True, null=True)
+    razorpay_account_id = models.CharField(max_length=100, blank=True, null=True)  # Teacher's linked account
+    
+    status = models.CharField(max_length=20, choices=PAYOUT_STATUS, default='PENDING')
+    
+    # Bank details (stored securely)
+    bank_account_number = models.CharField(max_length=50, blank=True, null=True)
+    bank_ifsc = models.CharField(max_length=11, blank=True, null=True)
+    bank_name = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    # Error handling
+    failure_reason = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['teacher', 'status']),
+            models.Index(fields=['status', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"Payout to {self.teacher.email} - {self.amount} {self.currency} ({self.status})"
+
+
+class Refund(models.Model):
+    """Refund requests and processing"""
+    
+    REFUND_STATUS = [
+        ('REQUESTED', 'Requested'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+        ('PROCESSING', 'Processing'),
+        ('COMPLETED', 'Completed'),
+        ('FAILED', 'Failed'),
+    ]
+    
+    REFUND_REASON = [
+        ('SESSION_CANCELLED', 'Session Cancelled'),
+        ('TEACHER_NO_SHOW', 'Teacher No-Show'),
+        ('POOR_QUALITY', 'Poor Quality'),
+        ('TECHNICAL_ISSUE', 'Technical Issue'),
+        ('OTHER', 'Other'),
+    ]
+    
+    payment = models.ForeignKey(
+        Payment,
+        on_delete=models.CASCADE,
+        related_name='refunds'
+    )
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='refund_requests'
+    )
+    
+    # Refund details
+    refund_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    reason = models.CharField(max_length=50, choices=REFUND_REASON)
+    description = models.TextField()
+    
+    # Processing
+    status = models.CharField(max_length=20, choices=REFUND_STATUS, default='REQUESTED')
+    razorpay_refund_id = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Review
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_refunds',
+        limit_choices_to={'role': 'ADMIN'}
+    )
+    admin_notes = models.TextField(blank=True, null=True)
+    
+    # Timestamps
+    requested_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-requested_at']
+        indexes = [
+            models.Index(fields=['student', 'status']),
+            models.Index(fields=['status', 'requested_at']),
+        ]
+    
+    def __str__(self):
+        return f"Refund #{self.id} - {self.refund_amount} ({self.status})"
+
+
+class Invoice(models.Model):
+    """Automated invoices for payments"""
+    
+    payment = models.OneToOneField(
+        Payment,
+        on_delete=models.CASCADE,
+        related_name='invoice'
+    )
+    
+    # Invoice details
+    invoice_number = models.CharField(max_length=50, unique=True)
+    invoice_date = models.DateField(auto_now_add=True)
+    
+    # Student details
+    student_name = models.CharField(max_length=255)
+    student_email = models.EmailField()
+    student_address = models.TextField(blank=True, null=True)
+    
+    # Items
+    items = models.JSONField(default=list)  # [{"description": "...", "amount": ...}]
+    
+    # Amounts
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    # PDF
+    pdf_file = models.FileField(upload_to='invoices/', blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Invoice #{self.invoice_number} - {self.student_email}"
+    
+    def generate_invoice_number(self):
+        """Generate unique invoice number"""
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        self.invoice_number = f"INV-{timestamp}-{self.payment.id}"
+        return self.invoice_number
+
+
+class TeacherBankAccount(models.Model):
+    """Teacher bank account details for payouts"""
+    
+    teacher = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='bank_account',
+        limit_choices_to={'role': 'TEACHER'}
+    )
+    
+    # Bank details
+    account_holder_name = models.CharField(max_length=255)
+    account_number = models.CharField(max_length=50)
+    ifsc_code = models.CharField(max_length=11)
+    bank_name = models.CharField(max_length=100)
+    branch_name = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Verification
+    is_verified = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    
+    # Razorpay linked account
+    razorpay_account_id = models.CharField(max_length=100, blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.teacher.email} - {self.bank_name}"
