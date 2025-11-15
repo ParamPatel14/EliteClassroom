@@ -100,3 +100,79 @@ urlpatterns += [
     path('ai/conversations/<int:conversation_id>/messages/', AIMessageListView.as_view(), name='ai-messages'),
     path('ai/feedback/', AIFeedbackView.as_view(), name='ai-feedback'),
 ]
+
+
+from django.urls import path
+from .views_assessment import (
+    GenerateMockTestView, MockTestListView, StartMockTestView,
+    SubmitMockTestView, MockTestAttemptListView, GenerateSessionSummaryView,
+    StudentAnalyticsView, CourseRecommendationsView
+)
+
+urlpatterns += [
+    # Mock Tests
+    path('sessions/<int:session_id>/generate-test/', GenerateMockTestView.as_view(), name='generate-test'),
+    path('tests/', MockTestListView.as_view(), name='test-list'),
+    path('tests/<int:test_id>/start/', StartMockTestView.as_view(), name='start-test'),
+    path('tests/attempts/<int:attempt_id>/submit/', SubmitMockTestView.as_view(), name='submit-test'),
+    path('tests/attempts/', MockTestAttemptListView.as_view(), name='attempt-list'),
+    
+    # Session Summaries
+    path('sessions/<int:session_id>/generate-summary/', GenerateSessionSummaryView.as_view(), name='generate-summary'),
+    
+    # Analytics & Recommendations
+    path('student/analytics/', StudentAnalyticsView.as_view(), name='student-analytics'),
+    path('student/recommendations/', CourseRecommendationsView.as_view(), name='course-recommendations'),
+]
+
+
+from django.urls import path
+from .views_chatbot import (
+    ChatbotInitView, ChatbotMessageView, FAQListView, FAQDetailView,
+    FAQFeedbackView, CreateSupportTicketView, UserTicketsView,
+    TicketDetailView, ConversationFeedbackView
+)
+
+urlpatterns += [
+    # Chatbot
+    path('chatbot/init/', ChatbotInitView.as_view(), name='chatbot-init'),
+    path('chatbot/message/', ChatbotMessageView.as_view(), name='chatbot-message'),
+    path('chatbot/<str:session_id>/feedback/', ConversationFeedbackView.as_view(), name='chatbot-feedback'),
+    
+    # FAQs
+    path('faqs/', FAQListView.as_view(), name='faq-list'),
+    path('faqs/<int:pk>/', FAQDetailView.as_view(), name='faq-detail'),
+    path('faqs/<int:faq_id>/feedback/', FAQFeedbackView.as_view(), name='faq-feedback'),
+    
+    # Support Tickets
+    path('support/tickets/create/', CreateSupportTicketView.as_view(), name='create-ticket'),
+    path('support/tickets/', UserTicketsView.as_view(), name='user-tickets'),
+    path('support/tickets/<int:pk>/', TicketDetailView.as_view(), name='ticket-detail'),
+]
+
+from django.urls import path
+from .views_payment import (
+    CreatePaymentOrderView, VerifyPaymentView, PaymentWebhookView,
+    RequestRefundView, ProcessRefundView, TeacherEarningsView,
+    AddBankAccountView, DownloadInvoiceView
+)
+
+urlpatterns += [
+    # Payments
+    path('payments/create-order/', CreatePaymentOrderView.as_view(), name='create-payment-order'),
+    path('payments/verify/', VerifyPaymentView.as_view(), name='verify-payment'),
+    path('payments/webhook/', PaymentWebhookView.as_view(), name='payment-webhook'),
+    
+    # Refunds
+    path('payments/<int:payment_id>/refund/', RequestRefundView.as_view(), name='request-refund'),
+    path('refunds/<int:refund_id>/process/', ProcessRefundView.as_view(), name='process-refund'),
+    
+    # Teacher
+    path('teacher/earnings/', TeacherEarningsView.as_view(), name='teacher-earnings'),
+    path('teacher/bank-account/', AddBankAccountView.as_view(), name='add-bank-account'),
+    
+    # Invoices
+    path('invoices/<int:invoice_id>/download/', DownloadInvoiceView.as_view(), name='download-invoice'),
+]
+
+

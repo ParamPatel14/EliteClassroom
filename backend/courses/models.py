@@ -652,3 +652,855 @@ class AIFeedback(models.Model):
     
     def __str__(self):
         return f"{self.student.email} rated {self.message.id}: {self.rating}/5"
+
+
+from django.db import models
+from django.conf import settings
+from django.core.validators import MinValueValidator, MaxValueValidator
+
+User = settings.AUTH_USER_MODEL
+
+# ... existing models (AIConversation, etc.)
+
+class MockTest(models.Model):
+    """AI-generated mock tests based on session content"""
+    
+    DIFFICULTY_CHOICES = [
+        ('EASY', 'Easy'),
+        ('MEDIUM', 'Medium'),
+        ('HARD', 'Hard'),
+    ]
+    
+    session = models.ForeignKey(
+        'Session',
+        on_delete=models.CASCADE,
+        related_name='mock_tests',
+        null=True,
+        blank=True
+    )
+    course = models.ForeignKey(
+        'Course',
+        on_delete=models.CASCADE,
+        related_name='mock_tests',
+        null=True,
+        blank=True
+    )
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='mock_tests',
+        limit_choices_to={'role': 'STUDENT'}
+    )
+    
+    # Test metadata
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    subject = models.CharField(max_length=100)
+    difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='MEDIUM')
+    
+    # Generation info
+    generated_from_content = models.TextField(blank=True, null=True)  # Source material
+    ai_prompt = models.TextField(blank=True, null=True)
+    
+    # Test configuration
+    total_questions = models.PositiveIntegerField(default=10)
+    duration_minutes = models.PositiveIntegerField(default=30)
+    passing_score = models.DecimalField(max_digits=5, decimal_places=2, default=60.00)
+    
+    # Status
+    is_published = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['student', 'created_at']),
+            models.Index(fields=['subject', 'difficulty']),
+        ]
+    
+    def __str__(self):
+        return f"{self.title} - {self.student.email}"
+
+
+class MockTestQuestion(models.Model):
+    """Questions in mock tests"""
+    
+    QUESTION_TYPE_CHOICES = [
+        ('MCQ', 'Multiple Choice'),
+        ('TRUE_FALSE', 'True/False'),
+        ('SHORT_ANSWER', 'Short Answer'),
+    ]
+    
+    mock_test = models.ForeignKey(
+        MockTest,
+        on_delete=models.CASCADE,
+        related_name='questions'
+    )
+    
+    order = models.PositiveIntegerField(default=0)
+    question_type = models.CharField(max_length=20, choices=QUESTION_TYPE_CHOICES, default='MCQ')
+    
+    # Question content
+    question_text = models.TextField()
+    explanation = models.TextField(blank=True, null=True)  # Why this answer is correct
+    
+    # MCQ options
+    options = models.JSONField(default=list, blank=True)  # ["Option A", "Option B", ...]
+    correct_answer = models.CharField(max_length=500)  # For MCQ: "A", for short: expected answer
+    
+    # Scoring
+    points = models.DecimalField(max_digits=5, decimal_places=2, default=1.00)
+    
+    # Analytics
+    bloom_level = models.CharField(max_length=50, blank=True, null=True)  # remember, understand, apply, etc.
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['order']
+        unique_together = ('mock_test', 'order')
+    
+    def __str__(self):
+        return f"Q{self.order}: {self.question_text[:50]}"
+
+
+class MockTestAttempt(models.Model):
+    """Student attempts at mock tests"""
+    
+    STATUS_CHOICES = [
+        ('IN_PROGRESS', 'In Progress'),
+        ('COMPLETED', 'Completed'),
+        ('ABANDONED', 'Abandoned'),
+    ]
+    
+    mock_test = models.ForeignKey(
+        MockTest,
+        on_delete=models.CASCADE,
+        related_name='attempts'
+    )
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='test_attempts'
+    )
+    
+    # Attempt info
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='IN_PROGRESS')
+    
+    # Scoring
+    total_score = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    max_score = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    passed = models.BooleanField(default=False)
+    
+    # Time tracking
+    started_at = models.DateTimeField(auto_now_add=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    time_taken_minutes = models.PositiveIntegerField(default=0)
+    
+    # PDF report
+    scorecard_pdf = models.FileField(upload_to='scorecards/', null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['student', 'status', 'started_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.student.email} - {self.mock_test.title} ({self.percentage}%)"
+
+
+class MockTestAnswer(models.Model):
+    """Student answers to test questions"""
+    
+    attempt = models.ForeignKey(
+        MockTestAttempt,
+        on_delete=models.CASCADE,
+        related_name='answers'
+    )
+    question = models.ForeignKey(
+        MockTestQuestion,
+        on_delete=models.CASCADE,
+        related_name='student_answers'
+    )
+    
+    # Answer
+    selected_answer = models.CharField(max_length=500)
+    is_correct = models.BooleanField(default=False)
+    points_earned = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    
+    # AI feedback
+    ai_feedback = models.TextField(blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ('attempt', 'question')
+    
+    def __str__(self):
+        return f"{self.attempt.student.email} - Q{self.question.order}"
+
+
+class SessionSummary(models.Model):
+    """AI-generated summaries of live sessions"""
+    
+    session = models.OneToOneField(
+        'Session',
+        on_delete=models.CASCADE,
+        related_name='ai_summary'
+    )
+    
+    # Summary content
+    summary_text = models.TextField()
+    key_topics = models.JSONField(default=list)  # ["Topic 1", "Topic 2", ...]
+    action_items = models.JSONField(default=list)  # ["Action 1", "Action 2", ...]
+    
+    # Transcript info
+    transcript_source = models.CharField(max_length=50, blank=True, null=True)  # "chat", "recording", "manual"
+    original_transcript = models.TextField(blank=True, null=True)
+    
+    # Generation metadata
+    ai_model_used = models.CharField(max_length=50, blank=True, null=True)
+    generated_at = models.DateTimeField(auto_now_add=True)
+    tokens_used = models.PositiveIntegerField(default=0)
+    
+    # Visibility
+    is_visible_to_student = models.BooleanField(default=True)
+    is_visible_to_teacher = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['-generated_at']
+    
+    def __str__(self):
+        return f"Summary: {self.session.title}"
+
+
+class StudentProgressAnalytics(models.Model):
+    """ML-powered student progress tracking"""
+    
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='progress_analytics'
+    )
+    course = models.ForeignKey(
+        'Course',
+        on_delete=models.CASCADE,
+        related_name='student_analytics',
+        null=True,
+        blank=True
+    )
+    
+    # Aggregated metrics
+    total_sessions = models.PositiveIntegerField(default=0)
+    total_test_attempts = models.PositiveIntegerField(default=0)
+    average_test_score = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    
+    # Learning velocity
+    modules_completed = models.PositiveIntegerField(default=0)
+    modules_in_progress = models.PositiveIntegerField(default=0)
+    completion_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)  # %
+    
+    # Engagement metrics
+    total_learning_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
+    avg_session_duration_minutes = models.DecimalField(max_digits=6, decimal_places=2, default=0.00)
+    last_activity_date = models.DateField(null=True, blank=True)
+    
+    # ML-generated insights
+    strengths = models.JSONField(default=list)  # ["Topic A", "Topic B"]
+    weaknesses = models.JSONField(default=list)  # ["Topic X", "Topic Y"]
+    recommended_topics = models.JSONField(default=list)  # Next topics to study
+    learning_pace = models.CharField(max_length=20, default='MODERATE')  # SLOW, MODERATE, FAST
+    
+    # Predictions
+    predicted_completion_date = models.DateField(null=True, blank=True)
+    at_risk_of_dropout = models.BooleanField(default=False)
+    dropout_risk_score = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)  # 0-100
+    
+    # Timestamps
+    computed_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ('student', 'course')
+        ordering = ['-computed_at']
+    
+    def __str__(self):
+        return f"{self.student.email} - {self.course.title if self.course else 'Overall'}"
+
+
+class RecommendedCourse(models.Model):
+    """ML-generated course recommendations"""
+    
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='course_recommendations'
+    )
+    course = models.ForeignKey(
+        'Course',
+        on_delete=models.CASCADE,
+        related_name='recommendations'
+    )
+    
+    # Recommendation metadata
+    confidence_score = models.DecimalField(max_digits=5, decimal_places=2)  # 0-100
+    reason = models.TextField()  # Why this course is recommended
+    
+    # Ranking
+    rank = models.PositiveIntegerField(default=0)
+    
+    # ML model info
+    model_version = models.CharField(max_length=50, blank=True, null=True)
+    features_used = models.JSONField(default=dict, blank=True)  # Feature weights
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['rank']
+        unique_together = ('student', 'course')
+    
+    def __str__(self):
+        return f"{self.student.email} -> {self.course.title} ({self.confidence_score}%)"
+
+
+from django.db import models
+from django.conf import settings
+
+User = settings.AUTH_USER_MODEL
+
+# ... existing models
+
+class SupportFAQ(models.Model):
+    """Knowledge base of frequently asked questions"""
+    
+    CATEGORY_CHOICES = [
+        ('ACCOUNT', 'Account & Login'),
+        ('BOOKING', 'Booking & Sessions'),
+        ('PAYMENT', 'Payment & Billing'),
+        ('TECHNICAL', 'Technical Issues'),
+        ('COURSES', 'Courses & Content'),
+        ('GENERAL', 'General Information'),
+    ]
+    
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    question = models.TextField()
+    answer = models.TextField()
+    
+    # SEO and searchability
+    keywords = models.JSONField(default=list, blank=True)  # ["login", "password", "reset"]
+    related_questions = models.ManyToManyField('self', symmetrical=True, blank=True)
+    
+    # Analytics
+    view_count = models.PositiveIntegerField(default=0)
+    helpful_count = models.PositiveIntegerField(default=0)
+    not_helpful_count = models.PositiveIntegerField(default=0)
+    
+    # Metadata
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['category', 'order']
+        verbose_name = "FAQ"
+        verbose_name_plural = "FAQs"
+    
+    def __str__(self):
+        return f"[{self.category}] {self.question[:50]}"
+
+
+class ChatbotConversation(models.Model):
+    """Support chatbot conversation sessions"""
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='chatbot_conversations',
+        null=True,
+        blank=True  # Allow anonymous users
+    )
+    session_id = models.CharField(max_length=100, unique=True)  # For anonymous tracking
+    
+    # Context
+    user_agent = models.CharField(max_length=500, blank=True, null=True)
+    page_url = models.CharField(max_length=500, blank=True, null=True)
+    referrer = models.CharField(max_length=500, blank=True, null=True)
+    
+    # Conversation metadata
+    message_count = models.PositiveIntegerField(default=0)
+    escalated_to_human = models.BooleanField(default=False)
+    resolved = models.BooleanField(default=False)
+    
+    # Feedback
+    user_satisfaction = models.PositiveIntegerField(null=True, blank=True)  # 1-5 rating
+    feedback_comment = models.TextField(blank=True, null=True)
+    
+    started_at = models.DateTimeField(auto_now_add=True)
+    last_message_at = models.DateTimeField(auto_now=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['session_id']),
+            models.Index(fields=['user', 'started_at']),
+        ]
+    
+    def __str__(self):
+        user_str = self.user.email if self.user else f"Anonymous ({self.session_id[:8]})"
+        return f"{user_str} - {self.message_count} msgs"
+
+
+class ChatbotMessage(models.Model):
+    """Individual messages in chatbot conversations"""
+    
+    ROLE_CHOICES = [
+        ('user', 'User'),
+        ('bot', 'Bot'),
+        ('system', 'System'),
+    ]
+    
+    conversation = models.ForeignKey(
+        ChatbotConversation,
+        on_delete=models.CASCADE,
+        related_name='messages'
+    )
+    
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    content = models.TextField()
+    
+    # Bot response metadata
+    intent_detected = models.CharField(max_length=100, blank=True, null=True)
+    confidence_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    faq_matched = models.ForeignKey(
+        SupportFAQ,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bot_matches'
+    )
+    
+    # LLM metadata
+    model_used = models.CharField(max_length=50, blank=True, null=True)
+    tokens_used = models.PositiveIntegerField(default=0)
+    response_time_ms = models.PositiveIntegerField(default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['created_at']
+    
+    def __str__(self):
+        return f"{self.role}: {self.content[:50]}"
+
+
+class SupportTicket(models.Model):
+    """Escalated support tickets from chatbot"""
+    
+    STATUS_CHOICES = [
+        ('OPEN', 'Open'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('WAITING', 'Waiting for User'),
+        ('RESOLVED', 'Resolved'),
+        ('CLOSED', 'Closed'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('URGENT', 'Urgent'),
+    ]
+    
+    ticket_number = models.CharField(max_length=20, unique=True)
+    
+    # User info
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='support_tickets'
+    )
+    email = models.EmailField()
+    name = models.CharField(max_length=255)
+    
+    # Ticket details
+    subject = models.CharField(max_length=255)
+    description = models.TextField()
+    category = models.CharField(max_length=50)
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN')
+    
+    # Context
+    conversation = models.ForeignKey(
+        ChatbotConversation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='escalated_tickets'
+    )
+    page_url = models.CharField(max_length=500, blank=True, null=True)
+    
+    # Assignment
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_tickets',
+        limit_choices_to={'role': 'ADMIN'}
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', 'priority']),
+            models.Index(fields=['user', 'status']),
+        ]
+    
+    def __str__(self):
+        return f"#{self.ticket_number} - {self.subject}"
+    
+    def save(self, *args, **kwargs):
+        if not self.ticket_number:
+            # Generate ticket number
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+            self.ticket_number = f"TKT-{timestamp}"
+        super().save(*args, **kwargs)
+
+
+class TicketMessage(models.Model):
+    """Messages in support ticket thread"""
+    
+    ticket = models.ForeignKey(
+        SupportTicket,
+        on_delete=models.CASCADE,
+        related_name='messages'
+    )
+    sender = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='ticket_messages'
+    )
+    
+    is_staff_reply = models.BooleanField(default=False)
+    message = models.TextField()
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['created_at']
+    
+    def __str__(self):
+        return f"Message on {self.ticket.ticket_number}"
+
+
+from django.db import models
+from django.conf import settings
+from django.utils import timezone
+from decimal import Decimal
+
+User = settings.AUTH_USER_MODEL
+
+# ... existing models (Session, Course, etc.)
+
+class Payment(models.Model):
+    """Payment transactions for sessions and courses"""
+    
+    PAYMENT_STATUS = [
+        ('PENDING', 'Pending'),
+        ('AUTHORIZED', 'Authorized'),
+        ('CAPTURED', 'Captured'),
+        ('FAILED', 'Failed'),
+        ('REFUNDED', 'Refunded'),
+        ('PARTIALLY_REFUNDED', 'Partially Refunded'),
+    ]
+    
+    PAYMENT_TYPE = [
+        ('SESSION', 'Session Booking'),
+        ('COURSE', 'Course Enrollment'),
+        ('SUBSCRIPTION', 'Subscription'),
+    ]
+    
+    # Relationships
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='payments',
+        limit_choices_to={'role': 'STUDENT'}
+    )
+    session = models.ForeignKey(
+        'Session',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payments'
+    )
+    course = models.ForeignKey(
+        'Course',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='course_payments'
+    )
+    
+    # Payment details
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)  # Total amount
+    platform_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)  # Our commission
+    teacher_amount = models.DecimalField(max_digits=10, decimal_places=2)  # Amount to teacher
+    currency = models.CharField(max_length=3, default='INR')
+    
+    # Razorpay IDs
+    razorpay_order_id = models.CharField(max_length=100, unique=True)
+    razorpay_payment_id = models.CharField(max_length=100, blank=True, null=True)
+    razorpay_signature = models.CharField(max_length=255, blank=True, null=True)
+    
+    # Status
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS, default='PENDING')
+    
+    # Escrow management
+    is_held_in_escrow = models.BooleanField(default=True)
+    escrow_release_date = models.DateTimeField(null=True, blank=True)
+    released_from_escrow = models.BooleanField(default=False)
+    
+    # Metadata
+    payment_method = models.CharField(max_length=50, blank=True, null=True)  # card, upi, netbanking
+    error_code = models.CharField(max_length=50, blank=True, null=True)
+    error_description = models.TextField(blank=True, null=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    authorized_at = models.DateTimeField(null=True, blank=True)
+    captured_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['student', 'status']),
+            models.Index(fields=['razorpay_order_id']),
+            models.Index(fields=['status', 'is_held_in_escrow']),
+        ]
+    
+    def __str__(self):
+        return f"{self.student.email} - {self.payment_type} - {self.amount} {self.currency}"
+    
+    def calculate_platform_fee(self):
+        """Calculate platform commission"""
+        fee_percentage = Decimal(settings.PLATFORM_COMMISSION_PERCENTAGE) / Decimal(100)
+        self.platform_fee = (self.amount * fee_percentage).quantize(Decimal('0.01'))
+        self.teacher_amount = (self.amount - self.platform_fee).quantize(Decimal('0.01'))
+        return self.platform_fee
+
+
+class Payout(models.Model):
+    """Teacher payouts from escrow"""
+    
+    PAYOUT_STATUS = [
+        ('PENDING', 'Pending'),
+        ('PROCESSING', 'Processing'),
+        ('COMPLETED', 'Completed'),
+        ('FAILED', 'Failed'),
+        ('REVERSED', 'Reversed'),
+    ]
+    
+    teacher = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='payouts',
+        limit_choices_to={'role': 'TEACHER'}
+    )
+    payment = models.OneToOneField(
+        Payment,
+        on_delete=models.CASCADE,
+        related_name='payout'
+    )
+    
+    # Payout details
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=3, default='INR')
+    
+    # Razorpay transfer details
+    razorpay_transfer_id = models.CharField(max_length=100, blank=True, null=True)
+    razorpay_account_id = models.CharField(max_length=100, blank=True, null=True)  # Teacher's linked account
+    
+    status = models.CharField(max_length=20, choices=PAYOUT_STATUS, default='PENDING')
+    
+    # Bank details (stored securely)
+    bank_account_number = models.CharField(max_length=50, blank=True, null=True)
+    bank_ifsc = models.CharField(max_length=11, blank=True, null=True)
+    bank_name = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    # Error handling
+    failure_reason = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['teacher', 'status']),
+            models.Index(fields=['status', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"Payout to {self.teacher.email} - {self.amount} {self.currency} ({self.status})"
+
+
+class Refund(models.Model):
+    """Refund requests and processing"""
+    
+    REFUND_STATUS = [
+        ('REQUESTED', 'Requested'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+        ('PROCESSING', 'Processing'),
+        ('COMPLETED', 'Completed'),
+        ('FAILED', 'Failed'),
+    ]
+    
+    REFUND_REASON = [
+        ('SESSION_CANCELLED', 'Session Cancelled'),
+        ('TEACHER_NO_SHOW', 'Teacher No-Show'),
+        ('POOR_QUALITY', 'Poor Quality'),
+        ('TECHNICAL_ISSUE', 'Technical Issue'),
+        ('OTHER', 'Other'),
+    ]
+    
+    payment = models.ForeignKey(
+        Payment,
+        on_delete=models.CASCADE,
+        related_name='refunds'
+    )
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='refund_requests'
+    )
+    
+    # Refund details
+    refund_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    reason = models.CharField(max_length=50, choices=REFUND_REASON)
+    description = models.TextField()
+    
+    # Processing
+    status = models.CharField(max_length=20, choices=REFUND_STATUS, default='REQUESTED')
+    razorpay_refund_id = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Review
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_refunds',
+        limit_choices_to={'role': 'ADMIN'}
+    )
+    admin_notes = models.TextField(blank=True, null=True)
+    
+    # Timestamps
+    requested_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-requested_at']
+        indexes = [
+            models.Index(fields=['student', 'status']),
+            models.Index(fields=['status', 'requested_at']),
+        ]
+    
+    def __str__(self):
+        return f"Refund #{self.id} - {self.refund_amount} ({self.status})"
+
+
+class Invoice(models.Model):
+    """Automated invoices for payments"""
+    
+    payment = models.OneToOneField(
+        Payment,
+        on_delete=models.CASCADE,
+        related_name='invoice'
+    )
+    
+    # Invoice details
+    invoice_number = models.CharField(max_length=50, unique=True)
+    invoice_date = models.DateField(auto_now_add=True)
+    
+    # Student details
+    student_name = models.CharField(max_length=255)
+    student_email = models.EmailField()
+    student_address = models.TextField(blank=True, null=True)
+    
+    # Items
+    items = models.JSONField(default=list)  # [{"description": "...", "amount": ...}]
+    
+    # Amounts
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    # PDF
+    pdf_file = models.FileField(upload_to='invoices/', blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Invoice #{self.invoice_number} - {self.student_email}"
+    
+    def generate_invoice_number(self):
+        """Generate unique invoice number"""
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        self.invoice_number = f"INV-{timestamp}-{self.payment.id}"
+        return self.invoice_number
+
+
+class TeacherBankAccount(models.Model):
+    """Teacher bank account details for payouts"""
+    
+    teacher = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='bank_account',
+        limit_choices_to={'role': 'TEACHER'}
+    )
+    
+    # Bank details
+    account_holder_name = models.CharField(max_length=255)
+    account_number = models.CharField(max_length=50)
+    ifsc_code = models.CharField(max_length=11)
+    bank_name = models.CharField(max_length=100)
+    branch_name = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Verification
+    is_verified = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    
+    # Razorpay linked account
+    razorpay_account_id = models.CharField(max_length=100, blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.teacher.email} - {self.bank_name}"

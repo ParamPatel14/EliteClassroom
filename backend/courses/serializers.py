@@ -293,3 +293,227 @@ class AIFeedbackSerializer(serializers.ModelSerializer):
         if value.conversation.student != request.user:
             raise serializers.ValidationError("Cannot rate messages from other students")
         return value
+
+
+from rest_framework import serializers
+from .models import (
+    MockTest, MockTestQuestion, MockTestAttempt, MockTestAnswer,
+    SessionSummary, StudentProgressAnalytics, RecommendedCourse
+)
+
+# ... existing serializers
+
+class MockTestQuestionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MockTestQuestion
+        fields = [
+            'id', 'order', 'question_type', 'question_text', 'options',
+            'points', 'bloom_level', 'explanation'
+        ]
+        # Hide correct_answer in student view
+
+
+class MockTestSerializer(serializers.ModelSerializer):
+    questions = MockTestQuestionSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = MockTest
+        fields = [
+            'id', 'title', 'description', 'subject', 'difficulty',
+            'total_questions', 'duration_minutes', 'passing_score',
+            'is_published', 'created_at', 'questions'
+        ]
+
+
+class MockTestAnswerSerializer(serializers.ModelSerializer):
+    question_text = serializers.CharField(source='question.question_text', read_only=True)
+    correct_answer = serializers.CharField(source='question.correct_answer', read_only=True)
+    
+    class Meta:
+        model = MockTestAnswer
+        fields = [
+            'id', 'question', 'question_text', 'selected_answer',
+            'correct_answer', 'is_correct', 'points_earned', 'ai_feedback'
+        ]
+        read_only_fields = ['is_correct', 'points_earned', 'ai_feedback']
+
+
+class MockTestAttemptSerializer(serializers.ModelSerializer):
+    mock_test = MockTestSerializer(read_only=True)
+    answers = MockTestAnswerSerializer(many=True, read_only=True)
+    scorecard_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = MockTestAttempt
+        fields = [
+            'id', 'mock_test', 'status', 'total_score', 'max_score',
+            'percentage', 'passed', 'started_at', 'submitted_at',
+            'time_taken_minutes', 'scorecard_pdf', 'scorecard_url', 'answers'
+        ]
+        read_only_fields = [
+            'total_score', 'max_score', 'percentage', 'passed',
+            'started_at', 'scorecard_pdf'
+        ]
+    
+    def get_scorecard_url(self, obj):
+        if obj.scorecard_pdf:
+            return obj.scorecard_pdf.url
+        return None
+
+
+class SessionSummarySerializer(serializers.ModelSerializer):
+    session_title = serializers.CharField(source='session.title', read_only=True)
+    
+    class Meta:
+        model = SessionSummary
+        fields = [
+            'id', 'session', 'session_title', 'summary_text', 'key_topics',
+            'action_items', 'generated_at', 'is_visible_to_student'
+        ]
+
+
+class StudentProgressAnalyticsSerializer(serializers.ModelSerializer):
+    course_title = serializers.CharField(source='course.title', read_only=True)
+    
+    class Meta:
+        model = StudentProgressAnalytics
+        fields = [
+            'id', 'course', 'course_title', 'total_sessions', 'total_test_attempts',
+            'average_test_score', 'modules_completed', 'modules_in_progress',
+            'completion_rate', 'total_learning_hours', 'avg_session_duration_minutes',
+            'last_activity_date', 'strengths', 'weaknesses', 'recommended_topics',
+            'learning_pace', 'predicted_completion_date', 'at_risk_of_dropout',
+            'dropout_risk_score', 'computed_at'
+        ]
+
+
+class RecommendedCourseSerializer(serializers.ModelSerializer):
+    course = CourseSerializer(read_only=True)
+    
+    class Meta:
+        model = RecommendedCourse
+        fields = ['id', 'course', 'confidence_score', 'reason', 'rank', 'created_at']
+
+
+from rest_framework import serializers
+from .models import (
+    SupportFAQ, ChatbotConversation, ChatbotMessage,
+    SupportTicket, TicketMessage
+)
+
+# ... existing serializers
+
+class SupportFAQSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SupportFAQ
+        fields = [
+            'id', 'category', 'question', 'answer', 'keywords',
+            'view_count', 'helpful_count', 'not_helpful_count'
+        ]
+
+
+class ChatbotMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatbotMessage
+        fields = [
+            'id', 'role', 'content', 'intent_detected',
+            'confidence_score', 'created_at'
+        ]
+
+
+class ChatbotConversationSerializer(serializers.ModelSerializer):
+    messages = ChatbotMessageSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = ChatbotConversation
+        fields = [
+            'id', 'session_id', 'message_count', 'escalated_to_human',
+            'resolved', 'started_at', 'messages'
+        ]
+
+
+class TicketMessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.CharField(source='sender.full_name', read_only=True)
+    
+    class Meta:
+        model = TicketMessage
+        fields = ['id', 'sender', 'sender_name', 'is_staff_reply', 'message', 'created_at']
+
+
+class SupportTicketSerializer(serializers.ModelSerializer):
+    messages = TicketMessageSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = SupportTicket
+        fields = [
+            'id', 'ticket_number', 'subject', 'description', 'category',
+            'priority', 'status', 'created_at', 'updated_at', 'messages'
+        ]
+
+
+from rest_framework import serializers
+from .models import Payment, Payout, Refund, Invoice, TeacherBankAccount
+
+# ... existing serializers
+
+class PaymentSerializer(serializers.ModelSerializer):
+    session_title = serializers.CharField(source='session.title', read_only=True)
+    course_title = serializers.CharField(source='course.title', read_only=True)
+    
+    class Meta:
+        model = Payment
+        fields = [
+            'id', 'student', 'session', 'session_title', 'course', 'course_title',
+            'payment_type', 'amount', 'platform_fee', 'teacher_amount', 'currency',
+            'razorpay_order_id', 'razorpay_payment_id', 'status', 'is_held_in_escrow',
+            'escrow_release_date', 'released_from_escrow', 'payment_method',
+            'created_at', 'captured_at'
+        ]
+        read_only_fields = ['student', 'platform_fee', 'teacher_amount', 'created_at']
+
+
+class PayoutSerializer(serializers.ModelSerializer):
+    teacher_name = serializers.CharField(source='teacher.full_name', read_only=True)
+    
+    class Meta:
+        model = Payout
+        fields = [
+            'id', 'teacher', 'teacher_name', 'payment', 'amount', 'currency',
+            'status', 'bank_name', 'created_at', 'processed_at', 'completed_at'
+        ]
+
+
+class RefundSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.full_name', read_only=True)
+    payment_amount = serializers.DecimalField(source='payment.amount', max_digits=10, decimal_places=2, read_only=True)
+    
+    class Meta:
+        model = Refund
+        fields = [
+            'id', 'payment', 'payment_amount', 'student', 'student_name',
+            'refund_amount', 'reason', 'description', 'status', 'admin_notes',
+            'requested_at', 'reviewed_at', 'completed_at'
+        ]
+        read_only_fields = ['student', 'requested_at']
+
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Invoice
+        fields = [
+            'id', 'invoice_number', 'invoice_date', 'student_name',
+            'student_email', 'subtotal', 'tax_amount', 'total_amount',
+            'pdf_file', 'created_at'
+        ]
+
+
+class TeacherBankAccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TeacherBankAccount
+        fields = [
+            'id', 'account_holder_name', 'account_number', 'ifsc_code',
+            'bank_name', 'branch_name', 'is_verified', 'verified_at'
+        ]
+        extra_kwargs = {
+            'account_number': {'write_only': True}  # Don't expose in responses
+        }

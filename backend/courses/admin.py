@@ -198,3 +198,154 @@ class AIFeedbackAdmin(admin.ModelAdmin):
     list_display = ('student', 'message', 'rating', 'is_helpful', 'created_at')
     list_filter = ('rating', 'is_helpful', 'created_at')
     search_fields = ('student__email', 'comment')
+
+
+from django.contrib import admin
+from .models import (
+    MockTest, MockTestQuestion, MockTestAttempt, MockTestAnswer,
+    SessionSummary, StudentProgressAnalytics, RecommendedCourse
+)
+
+# ... existing admin classes
+
+@admin.register(MockTest)
+class MockTestAdmin(admin.ModelAdmin):
+    list_display = ('title', 'student', 'subject', 'difficulty', 'total_questions', 'created_at')
+    list_filter = ('difficulty', 'is_published', 'created_at')
+    search_fields = ('title', 'student__email', 'subject')
+
+
+@admin.register(MockTestAttempt)
+class MockTestAttemptAdmin(admin.ModelAdmin):
+    list_display = ('student', 'mock_test', 'percentage', 'passed', 'status', 'started_at')
+    list_filter = ('status', 'passed', 'started_at')
+    search_fields = ('student__email', 'mock_test__title')
+
+
+@admin.register(SessionSummary)
+class SessionSummaryAdmin(admin.ModelAdmin):
+    list_display = ('session', 'generated_at', 'is_visible_to_student')
+    list_filter = ('generated_at', 'is_visible_to_student')
+    search_fields = ('session__title', 'summary_text')
+
+
+@admin.register(StudentProgressAnalytics)
+class StudentProgressAnalyticsAdmin(admin.ModelAdmin):
+    list_display = ('student', 'course', 'completion_rate', 'average_test_score', 'learning_pace', 'computed_at')
+    list_filter = ('learning_pace', 'at_risk_of_dropout', 'computed_at')
+    search_fields = ('student__email', 'course__title')
+
+
+@admin.register(RecommendedCourse)
+class RecommendedCourseAdmin(admin.ModelAdmin):
+    list_display = ('student', 'course', 'confidence_score', 'rank', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('student__email', 'course__title')
+
+
+from django.contrib import admin
+from .models import (
+    SupportFAQ, ChatbotConversation, ChatbotMessage,
+    SupportTicket, TicketMessage
+)
+
+# ... existing admin classes
+
+@admin.register(SupportFAQ)
+class SupportFAQAdmin(admin.ModelAdmin):
+    list_display = ('question', 'category', 'view_count', 'helpful_count', 'is_active', 'order')
+    list_filter = ('category', 'is_active')
+    search_fields = ('question', 'answer', 'keywords')
+    list_editable = ('order', 'is_active')
+
+
+@admin.register(ChatbotConversation)
+class ChatbotConversationAdmin(admin.ModelAdmin):
+    list_display = ('session_id', 'user', 'message_count', 'escalated_to_human', 'resolved', 'started_at')
+    list_filter = ('escalated_to_human', 'resolved', 'started_at')
+    search_fields = ('session_id', 'user__email')
+    readonly_fields = ('session_id', 'started_at', 'last_message_at')
+
+
+@admin.register(SupportTicket)
+class SupportTicketAdmin(admin.ModelAdmin):
+    list_display = ('ticket_number', 'subject', 'user', 'status', 'priority', 'created_at')
+    list_filter = ('status', 'priority', 'category', 'created_at')
+    search_fields = ('ticket_number', 'subject', 'email', 'name')
+    readonly_fields = ('ticket_number', 'created_at')
+    
+    actions = ['mark_resolved', 'mark_in_progress']
+    
+    @admin.action(description="Mark as Resolved")
+    def mark_resolved(self, request, queryset):
+        queryset.update(status='RESOLVED', resolved_at=timezone.now())
+    
+    @admin.action(description="Mark as In Progress")
+    def mark_in_progress(self, request, queryset):
+        queryset.update(status='IN_PROGRESS')
+
+
+from django.contrib import admin
+from django.utils import timezone
+from .models import Payment, Payout, Refund, Invoice, TeacherBankAccount
+
+# ... existing admin classes
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ('id', 'student', 'payment_type', 'amount', 'status', 'is_held_in_escrow', 'created_at')
+    list_filter = ('status', 'payment_type', 'is_held_in_escrow', 'created_at')
+    search_fields = ('student__email', 'razorpay_order_id', 'razorpay_payment_id')
+    readonly_fields = ('created_at', 'captured_at')
+    
+    actions = ['release_from_escrow']
+    
+    @admin.action(description="Release selected payments from escrow")
+    def release_from_escrow(self, request, queryset):
+        from .payment_service import EscrowManager
+        released = 0
+        for payment in queryset:
+            if EscrowManager.release_payment(payment):
+                released += 1
+        self.message_user(request, f"{released} payments released from escrow")
+
+
+@admin.register(Payout)
+class PayoutAdmin(admin.ModelAdmin):
+    list_display = ('id', 'teacher', 'amount', 'status', 'created_at', 'completed_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('teacher__email', 'razorpay_transfer_id')
+
+
+@admin.register(Refund)
+class RefundAdmin(admin.ModelAdmin):
+    list_display = ('id', 'student', 'refund_amount', 'reason', 'status', 'requested_at')
+    list_filter = ('status', 'reason', 'requested_at')
+    search_fields = ('student__email', 'description')
+    
+    actions = ['approve_refunds', 'reject_refunds']
+    
+    @admin.action(description="Approve selected refunds")
+    def approve_refunds(self, request, queryset):
+        for refund in queryset.filter(status='REQUESTED'):
+            # Process via view logic
+            pass
+
+
+@admin.register(Invoice)
+class InvoiceAdmin(admin.ModelAdmin):
+    list_display = ('invoice_number', 'student_email', 'total_amount', 'invoice_date')
+    search_fields = ('invoice_number', 'student_email')
+
+
+@admin.register(TeacherBankAccount)
+class TeacherBankAccountAdmin(admin.ModelAdmin):
+    list_display = ('teacher', 'bank_name', 'account_holder_name', 'is_verified')
+    list_filter = ('is_verified', 'bank_name')
+    search_fields = ('teacher__email', 'account_holder_name')
+    
+    actions = ['verify_accounts']
+    
+    @admin.action(description="Verify selected bank accounts")
+    def verify_accounts(self, request, queryset):
+        queryset.update(is_verified=True, verified_at=timezone.now())

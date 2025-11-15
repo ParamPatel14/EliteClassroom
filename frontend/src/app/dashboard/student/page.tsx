@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import axiosInstance from '@/lib/axios';
 import Link from 'next/link';
+import ProgressWidget from '@/components/analytics/ProgressWidget';
 
 interface DashboardData {
   enrollments: any[];
@@ -53,6 +54,7 @@ export default function StudentDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <ProgressWidget />
       <nav className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">Student Dashboard</h1>
@@ -69,6 +71,9 @@ export default function StudentDashboard() {
             <Link href="/ai-tutor">
               <Button variant="primary">🤖 AI Tutor</Button>
             </Link>
+
+
+
 
           </div>
         </div>
